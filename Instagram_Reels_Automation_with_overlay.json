@@ -1,0 +1,1217 @@
+{
+  "name": "Instagram Reels Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Upload Files",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "File 1",
+              "fieldType": "file"
+            },
+            {
+              "fieldLabel": "File 2",
+              "fieldType": "file"
+            },
+            {
+              "fieldLabel": "File 3",
+              "fieldType": "file"
+            },
+            {
+              "fieldLabel": "File 4",
+              "fieldType": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        -1120,
+        1232
+      ],
+      "id": "fe183359-268d-4d14-bcca-553cc75117e6",
+      "name": "On form submission",
+      "webhookId": "a5cb62af-63a7-4912-b2c9-9553594c5f5d"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "You are an expert Hindi newspaper analyst and structured data extractor.\n\nYou are given multiple images of a Hindi newspaper.\n\nYour job is to extract, clean, merge, and summarize all articles accurately.\n\n⸻\n\nCORE INSTRUCTIONS\n\t1.\tArticle Detection\n\n\t•\tIdentify distinct news articles from the images.\n\t•\tArticles may span across multiple images/pages.\n\n\t2.\tMerging Logic\n\n\t•\tMerge content into ONE article if:\n• Headlines are same or very similar\n• Content is clearly a continuation\n• Topic is identical\n\n\t3.\tDeduplication\n\n\t•\tRemove duplicate articles completely.\n\t•\tIf the same article appears multiple times, keep only one clean version.\n\n\t4.\tTitle Handling\n\n\t•\t“article_title” → keep original Hindi headline\n\t•\t“article_title_english” → convert into natural, professional English headline\n\t•\tDO NOT transliterate Hindi into English\n\t•\tMake it sound like a real news headline\n\n\t5.\tSummaries\n\n\t•\tहिंदी सारांश → 3–5 concise sentences\n\t•\tEnglish summary → 3–5 natural sentences\n\t•\tFocus on key facts, events, and outcomes\n\t•\tRemove noise, ads, or irrelevant text\n\n\t6.\tIgnore\n\n\t•\tAdvertisements\n\t•\tPage numbers\n\t•\tQR codes\n\t•\tRepeated headers/footers\n\t•\tNon-news content\n\n⸻\n\nGLOBAL OUTPUT\n\t7.\tTotal Articles\n\n\t•\tCount final unique articles after merging & deduplication\n\n\t8.\tOverall Summary\n\n\t•\tWrite ONE combined summary of ALL articles\n\t•\tHindi + English versions\n\t•\tShould reflect major themes/events of the page\n\n⸻\n\nSTRICT OUTPUT RULES\n\t•\tOutput MUST be valid JSON\n\t•\tDO NOT include markdown\n\t•\tDO NOT include explanations\n\t•\tDO NOT include extra text\n\t•\tDO NOT wrap in ```json\n\n⸻\n\nOUTPUT FORMAT\n\n{\n“total_articles”: number,\n“overall_summary_hindi”: “”,\n“overall_summary_english”: “”,\n“articles”: [\n{\n“article_title”: “”,\n“article_title_english”: “”,\n“hindi_summary”: “”,\n“english_summary”: “”\n}\n]\n}\n",
+        "inputType": "binary",
+        "binaryPropertyName": "image",
+        "simplify": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -672,
+        1232
+      ],
+      "id": "00fc8a43-38ef-4a5d-8cf4-3d42d6582761",
+      "name": "Analyze an image",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Ksi5AsI325geSbXl",
+          "name": "Google Gemini(PaLM) Api account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allArticles = [];\nlet articleCounter = 1;\n\nfor (const item of $input.all()) {\n  let raw = item.json.candidates?.[0]?.content?.parts?.[0]?.text || \"\";\n  const jsonMatch = raw.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) {\n    continue;\n  }\n  let jsonStr = jsonMatch[0];\n  jsonStr = jsonStr.replace(/,(\\s*[}\\]])/g, \"$1\");\n  jsonStr = jsonStr.replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g, \"\");\n  let parsed;\n  try {\n    parsed = JSON.parse(jsonStr);\n  } catch (e) {\n    continue;\n  }\n  if (parsed.articles && Array.isArray(parsed.articles)) {\n    for (const article of parsed.articles) {\n      allArticles.push({\n        json: {\n          article_number: articleCounter++,\n          title_hindi: article.article_title || \"\",\n          title_english: article.article_title_english || \"\",\n          description_hindi: article.hindi_summary || \"\",\n          description_english: article.english_summary || \"\"\n        }\n      });\n    }\n  }\n}\n\nreturn allArticles;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        1136
+      ],
+      "id": "22d9214d-102a-4929-b829-a4cc06f15bf3",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      title: $json.title_english,\n      overall_summary_hindi: $json.description_hindi,\n      overall_summary_english: $json.description_english\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        464
+      ],
+      "id": "7b7123a7-e037-4f54-92c6-a90b3fc2ef0e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "5845124726",
+        "message": "=📰 {{ $json.results?.[0]?.title || 'Untitled' }}\n\n🎬 Hindi Script:\n{{ $json.results?.[0]?.reframed_script_hindi || '' }}\n\n🌐 English Script:\n{{ $json.results?.[0]?.reframed_script_english || '' }}\n\n📊 Deviation: {{ $json.results?.[0]?.deviation_percent ?? 0 }}%\n➕ Facts added: {{ ($json.results?.[0]?.facts_added || []).length ? $json.results[0].facts_added.join(', ') : 'None' }}\n➖ Facts removed: {{ ($json.results?.[0]?.facts_removed || []).length ? $json.results[0].facts_removed.join(', ') : 'None' }}",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1024,
+        320
+      ],
+      "id": "4d5f0904-0ce6-4070-bb81-932449b2de47",
+      "name": "Send message and wait for response",
+      "webhookId": "3b3fd129-87db-4dcf-8780-d0cf87bdcd22",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "fZvMgGekTMumwO0B",
+          "name": "Telegram account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1de36877-2ab9-4b8b-94e7-d5002fdb9966",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        320
+      ],
+      "id": "ceec4c37-b6db-40e4-b88a-14ef37edee3c",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a prompt-generation specialist for an AI news anchor video series, built for\nLTX-Video 2.3 (22B) running in ComfyUI. Your job is to take a raw news item as input and\noutput a single, detailed video prompt describing the anchor delivering that news —\nwhile keeping the anchor's appearance, voice character, set, and overall visual style\nCOMPLETELY IDENTICAL across every prompt you generate. Only the news content, the anchor's\nspoken lines, and minor delivery beats (tone, pacing, gestures) should change from one\nprompt to the next.\n\n===========================================================\nFIXED ANCHOR & SET DESCRIPTION (use this EXACT block, unchanged, every single time)\n===========================================================\n\n\"A composed, striking female news anchor in her early 20s, shoulder-length straight black\nhair, sharp professional makeup, wearing a navy blue blazer over a white blouse, seated at\na modern glass news desk with a softly blurred newsroom backdrop of muted blue and grey\nscreens. The studio backdrop displays \"SGNR NEWS\" branding. Studio lighting is soft, even,\nand flattering, key light from camera-left, subtle rim light separating her from the\nbackground. Shot on a 50mm-equivalent lens, shallow depth of field, clean broadcast color\ngrade. The anchor maintains a calm, composed, direct-to-camera presence throughout, with\nnatural micro-movements (blinking, slight head tilt) but no major positional drift.\"\n\n===========================================================\nYOUR TASK STRUCTURE\n===========================================================\nGiven a news item (title, Hindi summary, English summary), produce ONE prompt following\nthis structure:\n\n1. OPENING — Always begin with the fixed anchor/set description above, verbatim,\n   unchanged. Do not paraphrase or vary the wording between generations. This is the\n   identity anchor for the model — any drift here breaks character consistency across the\n   series.\n\n2. CAMERA — Keep camera direction consistent across all videos: a static or very slow,\n   subtle push-in on a medium shot, framed from chest-up, locked on the anchor's face, no\n   handheld shake, no cuts mid-clip. Do not introduce new camera movements per news item —\n   consistency here matters more than variety.\n\n3. DELIVERY BEAT — Add ONE short sentence describing the anchor's physical delivery style\n   for THIS particular story only (e.g. \"she leans slightly forward, voice steady and\n   grave\" for serious news, or \"she allows a small, warm smile\" for a light human-interest\n   story). This is the only place tone should shift story-to-story — never change her\n   described face, hair, clothing, or set.\n\n4. SPOKEN LINE — Convert the input news into ONE natural-sounding spoken anchor line, in\n   Hinglish (natural code-switched Hindi-English, written in Roman script, the way a real\n   Indian news anchor speaks on air): clear, concise, broadcast tone, 1-3 sentences. Strip\n   filler words, write it as flowing spoken language, not a headline. Prioritize the\n   English summary for factual accuracy and the Hindi summary for phrasing/tone cues. Label\n   it as dialogue:\n   Anchor (steady, professional tone): \"...\"\n   Adjust only the bracketed tone descriptor to match the story's gravity (steady / grave /\n   warm / urgent / measured) — never the anchor's described appearance.\n\n5. CLOSING — End with a short, consistent closing visual beat (e.g. \"she holds eye contact\n   with the camera as the segment closes\" or \"a brief pause before the screen cuts to the\n   next segment\") — reused with minimal variation across all videos to reinforce the\n   anchor's consistent on-screen presence.\n\n===========================================================\nOUTPUT FORMAT\n===========================================================\nWrap the full result exactly like this, matching the existing CLIPTextEncode input format:\n\nA cinematic scene. Video Prompt:\n\n\"[fixed anchor/set description] [camera direction]. [delivery beat].\n\nAnchor ([tone]): '[spoken news line]'\n\n[closing beat].\"\n\n===========================================================\nRULES\n===========================================================\n- NEVER change the anchor's physical description, clothing, hairstyle, set, or lighting\n  between generations — copy that block verbatim every time. This is the single most\n  important rule; consistency here is the entire point of this system.\n- Only the delivery tone, spoken line, and minor closing detail may vary based on news\n  content.\n- Convert raw news text into broadcast-style spoken Hinglish — do not just read the\n  headline verbatim; phrase it the way a real anchor would say it aloud.\n- Keep the spoken line to 1-3 sentences (roughly 8-15 seconds of speech) unless the user\n  specifies a longer segment.\n- Do not add a negative prompt.\n- If the news item is sensitive (death, tragedy, disaster), default the tone descriptor to\n  \"measured, respectful\" and avoid dramatizing language or sensational phrasing.\n- Avoid camera or lighting language that contradicts the fixed block (no new angles, no\n  new light sources, no wardrobe/hair changes) — this is what causes identity drift in\n  LTX-Video across a multi-clip series.\n- Total prompt length: 120-220 words.\n\nNow wait for the user's news input ({{ $json.title }}, {{ $json.summary_hindi }},\n{{ $json.summary_english }}) and generate the anchor video prompt following this exact\nstructure, reusing the fixed anchor block unchanged.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1920,
+        224
+      ],
+      "id": "22a23b55-c892-4d89-ae1d-04d9eacee3f4",
+      "name": "AI Agent1",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let data;\ntry {\n  data = $(\"Code in JavaScript4\").item.json;\n} catch (e) {\n  data = $(\"Code in JavaScript4\").first().json;\n}\nconst results = data?.results || [];\nreturn results.map(item => ({\n  json: {\n    title: item?.title || \"Untitled\",\n    summary_hindi: item?.reframed_script_hindi || \"\",\n    summary_english: item?.reframed_script_english || \"\"\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        320
+      ],
+      "id": "3d328fd2-23fe-4e2e-a94b-a267f640bbfe",
+      "name": "Code in JavaScript2",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        448
+      ],
+      "id": "4f2b541b-cf9d-4073-a288-78e4923cfa88",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Q6l72BjnKkz93QnO",
+          "name": "Google Gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        1136
+      ],
+      "id": "ce6ffeca-18c8-4ab0-9af4-b222a427571f",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "==You are reframing a Hindi news summary into a short-form video voiceover script.\n\nYou will receive ONE news item with:\n- title: the news headline\n- overall_summary_hindi: the original Hindi summary\n- overall_summary_english: the original English summary\n\nDo the following:\n\n1. REFRAME the story into a punchy, engaging video voiceover script:\n   - reframed_script_hindi: rewrite overall_summary_hindi as a natural spoken-tone Hindi script suitable for a short news video. You may reorder for hook/pacing, simplify sentence structure, and tighten phrasing. You must NOT add facts, numbers, names, claims, or implications not present in overall_summary_hindi. You must NOT drop any fact that materially changes the story's meaning if omitted.\n   - reframed_script_english: an English translation of reframed_script_hindi, matching its scope exactly — not a fresh translation of overall_summary_english.\n\n2. COMPARE reframed_script_hindi against overall_summary_hindi:\n   - facts_added: array of short strings — facts/claims/numbers present in reframed_script_hindi but NOT in overall_summary_hindi. Empty array if none.\n   - facts_removed: array of short strings — facts/numbers/names in overall_summary_hindi missing from reframed_script_hindi. Empty array if none.\n   - wording_changed_only: true if only phrasing/order/tone differ, false otherwise.\n   - deviation_percent: 0-100 (0-5 phrasing only, 6-15 minor simplification, 16-30 material omission/softening, 31-50 fact added/removed/altered, 51-100 substantial departure). If both arrays are empty, this must be ≤5.\n\nRules:\n- Preserve all numbers, percentages, dates, proper nouns exactly when retained.\n- Do not infer outcomes/causes not stated in overall_summary_hindi.\n- title is for reference only.\n- Output ONLY valid JSON, no markdown fences, no preamble.\n\nOutput schema:\n{\n  \"title\": string,\n  \"reframed_script_hindi\": string,\n  \"reframed_script_english\": string,\n  \"facts_added\": [string],\n  \"facts_removed\": [string],\n  \"wording_changed_only\": boolean,\n  \"deviation_percent\": number\n}\n\ntitle: {{ $json.title }}\noverall_summary_hindi: {{ $json.overall_summary_hindi }}\noverall_summary_english: {{ $json.overall_summary_english }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        464
+      ],
+      "id": "d2a71a3f-144d-4c3c-89d4-a09bdf154bd2",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Q6l72BjnKkz93QnO",
+          "name": "Google Gemini"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const parts = $json.content?.parts || [];\nconst rawText = parts.map(p => p.text).join('\\n').trim();\nconst jsonMatch = rawText.match(/\\{[\\s\\S]*\\}/);\nlet parsed = {};\n\nif (jsonMatch) {\n  let jsonStr = jsonMatch[0];\n  jsonStr = jsonStr.replace(/,(\\s*[}\\]])/g, \"$1\");\n  jsonStr = jsonStr.replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g, \"\");\n  try {\n    parsed = JSON.parse(jsonStr);\n  } catch (e) {\n    parsed = {\n      title: \"JSON Parse Error\",\n      reframed_script_hindi: \"Error parsing model JSON: \" + e.message + \"\\nRaw Text: \" + rawText,\n      reframed_script_english: \"\",\n      deviation_percent: 0,\n      facts_added: [],\n      facts_removed: []\n    };\n  }\n} else {\n  parsed = {\n    title: \"No JSON Found\",\n    reframed_script_hindi: \"Model did not output JSON.\\nRaw Text: \" + rawText,\n    reframed_script_english: \"\",\n    deviation_percent: 0,\n    facts_added: [],\n    facts_removed: []\n  };\n}\n\nparsed.title = parsed.title || \"Untitled\";\nparsed.reframed_script_hindi = parsed.reframed_script_hindi || \"\";\nparsed.reframed_script_english = parsed.reframed_script_english || \"\";\nparsed.facts_added = Array.isArray(parsed.facts_added) ? parsed.facts_added : [];\nparsed.facts_removed = Array.isArray(parsed.facts_removed) ? parsed.facts_removed : [];\nparsed.deviation_percent = typeof parsed.deviation_percent === 'number' ? parsed.deviation_percent : 0;\n\nreturn { json: { results: [parsed] } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        400
+      ],
+      "id": "c56d7c62-883f-4e73-a020-3088e9cb9a8c",
+      "name": "Code in JavaScript4",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryData = $input.first().binary;\nconst items = [];\n\nfor (let i = 1; i <= 4; i++) {\n  const key = `File_${i}`;\n  if (binaryData && binaryData[key]) {\n    items.push({\n      json: {\n        image_number: i,\n        binary_key: key\n      },\n      binary: {\n        image: binaryData[key]\n      }\n    });\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        1232
+      ],
+      "id": "610f8cdb-1488-4fa3-ad9f-5872a1bf29c5",
+      "name": "Prepare Images"
+    },
+    {
+      "parameters": {
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        464
+      ],
+      "id": "897f5fd0-4bb2-427a-995e-431ce34ba172",
+      "name": "Wait",
+      "webhookId": "ab6326be-06fe-4e87-9032-6ee4a845aad5"
+    },
+    {
+      "parameters": {
+        "workflow": "={\n  \"16\": {\n    \"inputs\": {\n      \"text\": \"blurry, low quality, still frame, frames, watermark, overlay, titles, has blurbox, has subtitles\",\n      \"clip\": [\"26\", 0]\n    },\n    \"class_type\": \"CLIPTextEncode\",\n    \"_meta\": { \"title\": \"CLIP Text Encode (Negative)\" }\n  },\n  \"17\": {\n    \"inputs\": {\n      \"frame_rate\": 24,\n      \"positive\": [\"18\", 0],\n      \"negative\": [\"16\", 0]\n    },\n    \"class_type\": \"LTXVConditioning\",\n    \"_meta\": { \"title\": \"LTXVConditioning\" }\n  },\n  \"18\": {\n    \"inputs\": {\n      \"text\": \"{{ JSON.stringify($json.output).slice(1,-1) }}\",\n      \"clip\": [\"26\", 0]\n    },\n    \"class_type\": \"CLIPTextEncode\",\n    \"_meta\": { \"title\": \"CLIP Text Encode (Positive)\" }\n  },\n  \"21\": {\n    \"inputs\": {\n      \"vae_name\": \"ltx-2.3-22b-dev_audio_vae.safetensors\",\n      \"device\": \"main_device\",\n      \"weight_dtype\": \"bf16\"\n    },\n    \"class_type\": \"VAELoaderKJ\",\n    \"_meta\": { \"title\": \"Audio VAE\" }\n  },\n  \"22\": {\n    \"inputs\": {\n      \"vae_name\": \"ltx-2.3-22b-dev_video_vae.safetensors\",\n      \"device\": \"main_device\",\n      \"weight_dtype\": \"bf16\"\n    },\n    \"class_type\": \"VAELoaderKJ\",\n    \"_meta\": { \"title\": \"Video VAE\" }\n  },\n  \"23\": {\n    \"inputs\": {\n      \"model_name\": \"ltx-2.3-spatial-upscaler-x2-1.1.safetensors\"\n    },\n    \"class_type\": \"LatentUpscaleModelLoader\",\n    \"_meta\": { \"title\": \"Load Latent Upscale Model\" }\n  },\n  \"24\": {\n    \"inputs\": {\n      \"vae_name\": \"taeltx2_3.safetensors\"\n    },\n    \"class_type\": \"VAELoader\",\n    \"_meta\": { \"title\": \"Load Tiny VAE\" }\n  },\n  \"25\": {\n    \"inputs\": {\n      \"unet_name\": \"ltx-2.3-22b-distilled-Q4_K_M.gguf\"\n    },\n    \"class_type\": \"UnetLoaderGGUF\",\n    \"_meta\": { \"title\": \"Unet Loader (GGUF)\" }\n  },\n  \"26\": {\n    \"inputs\": {\n      \"clip_name1\": \"gemma_3_12B_it_fp4_mixed.safetensors\",\n      \"clip_name2\": \"ltx-2.3_text_projection_bf16.safetensors\",\n      \"type\": \"ltxv\",\n      \"device\": \"default\"\n    },\n    \"class_type\": \"DualCLIPLoader\",\n    \"_meta\": { \"title\": \"DualCLIPLoader\" }\n  },\n  \"27\": {\n    \"inputs\": {\n      \"enable_fp16_accumulation\": false,\n      \"model\": [\"25\", 0]\n    },\n    \"class_type\": \"ModelPatchTorchSettings\",\n    \"_meta\": { \"title\": \"Model Patch Torch Settings\" }\n  },\n  \"28\": {\n    \"inputs\": {\n      \"sage_attention\": \"disabled\",\n      \"allow_compile\": true,\n      \"model\": [\"27\", 0]\n    },\n    \"class_type\": \"PathchSageAttentionKJ\",\n    \"_meta\": { \"title\": \"Patch Sage Attention KJ\" }\n  },\n  \"30\": {\n    \"inputs\": {\n      \"chunks\": 2,\n      \"dim_threshold\": 2048,\n      \"model\": [\"28\", 0]\n    },\n    \"class_type\": \"LTXVChunkFeedForward\",\n    \"_meta\": { \"title\": \"LTXV Chunk FeedForward\" }\n  },\n  \"33\": {\n    \"inputs\": {\n      \"noise_seed\": 972047332644367\n    },\n    \"class_type\": \"RandomNoise\",\n    \"_meta\": { \"title\": \"RandomNoise\" }\n  },\n  \"34\": {\n    \"inputs\": {\n      \"cfg\": 1,\n      \"model\": [\"30\", 0],\n      \"positive\": [\"17\", 0],\n      \"negative\": [\"17\", 1]\n    },\n    \"class_type\": \"CFGGuider\",\n    \"_meta\": { \"title\": \"CFG Guider\" }\n  },\n  \"35\": {\n    \"inputs\": {\n      \"sampler_name\": \"euler_ancestral\"\n    },\n    \"class_type\": \"KSamplerSelect\",\n    \"_meta\": { \"title\": \"KSamplerSelect\" }\n  },\n  \"36\": {\n    \"inputs\": {\n      \"sigmas\": \"1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0\"\n    },\n    \"class_type\": \"ManualSigmas\",\n    \"_meta\": { \"title\": \"ManualSigmas\" }\n  },\n  \"37\": {\n    \"inputs\": {\n      \"noise\": [\"33\", 0],\n      \"guider\": [\"34\", 0],\n      \"sampler\": [\"35\", 0],\n      \"sigmas\": [\"36\", 0],\n      \"latent_image\": [\"38\", 0]\n    },\n    \"class_type\": \"SamplerCustomAdvanced\",\n    \"_meta\": { \"title\": \"SamplerCustomAdvanced\" }\n  },\n  \"38\": {\n    \"inputs\": {\n      \"video_latent\": [\"45\", 0],\n      \"audio_latent\": [\"46\", 0]\n    },\n    \"class_type\": \"LTXVConcatAVLatent\",\n    \"_meta\": { \"title\": \"LTXVConcatAVLatent\" }\n  },\n  \"39\": {\n    \"inputs\": {\n      \"value\": [\"51\", 1]\n    },\n    \"class_type\": \"PrimitiveInt\",\n    \"_meta\": { \"title\": \"Frame Rate(int)\" }\n  },\n  \"40\": {\n    \"inputs\": {\n      \"value\": [\"51\", 0]\n    },\n    \"class_type\": \"PrimitiveFloat\",\n    \"_meta\": { \"title\": \"Frame Rate(float)\" }\n  },\n  \"41\": {\n    \"inputs\": {\n      \"width\": 900,\n      \"height\": 1600,\n      \"batch_size\": 1,\n      \"color\": 0\n    },\n    \"class_type\": \"EmptyImage\",\n    \"_meta\": { \"title\": \"Empty Image\" }\n  },\n  \"42\": {\n    \"inputs\": {\n      \"upscale_method\": \"lanczos\",\n      \"scale_by\": 0.5,\n      \"image\": [\"41\", 0]\n    },\n    \"class_type\": \"ImageScaleBy\",\n    \"_meta\": { \"title\": \"Upscale Image By\" }\n  },\n  \"43\": {\n    \"inputs\": {\n      \"value\": [\"50\", 1]\n    },\n    \"class_type\": \"PrimitiveInt\",\n    \"_meta\": { \"title\": \"Length\" }\n  },\n  \"44\": {\n    \"inputs\": {\n      \"image\": [\"42\", 0]\n    },\n    \"class_type\": \"GetImageSize\",\n    \"_meta\": { \"title\": \"Get Image Size\" }\n  },\n  \"45\": {\n    \"inputs\": {\n      \"width\": [\"44\", 0],\n      \"height\": [\"44\", 1],\n      \"length\": [\"43\", 0],\n      \"batch_size\": 1\n    },\n    \"class_type\": \"EmptyLTXVLatentVideo\",\n    \"_meta\": { \"title\": \"EmptyLTXVLatentVideo\" }\n  },\n  \"46\": {\n    \"inputs\": {\n      \"frames_number\": [\"43\", 0],\n      \"frame_rate\": [\"39\", 0],\n      \"batch_size\": 1,\n      \"audio_vae\": [\"21\", 0]\n    },\n    \"class_type\": \"LTXVEmptyLatentAudio\",\n    \"_meta\": { \"title\": \"LTXV Empty Latent Audio\" }\n  },\n  \"48\": {\n    \"inputs\": {\n      \"value\": 20\n    },\n    \"class_type\": \"easy int\",\n    \"_meta\": { \"title\": \"Length in Seconds\" }\n  },\n  \"50\": {\n    \"inputs\": {\n      \"multiply_by\": [\"40\", 0],\n      \"add_by\": 1,\n      \"numberA\": [\"48\", 0]\n    },\n    \"class_type\": \"MultiplicationNode\",\n    \"_meta\": { \"title\": \"Math Operation ♾️Mixlab\" }\n  },\n  \"51\": {\n    \"inputs\": {\n      \"multiply_by\": 1,\n      \"add_by\": 0,\n      \"numberA\": [\"52\", 0]\n    },\n    \"class_type\": \"MultiplicationNode\",\n    \"_meta\": { \"title\": \"Math Operation ♾️Mixlab\" }\n  },\n  \"52\": {\n    \"inputs\": {\n      \"value\": 24\n    },\n    \"class_type\": \"easy int\",\n    \"_meta\": { \"title\": \"Frame Rate\" }\n  },\n  \"53\": {\n    \"inputs\": {\n      \"av_latent\": [\"37\", 0]\n    },\n    \"class_type\": \"LTXVSeparateAVLatent\",\n    \"_meta\": { \"title\": \"LTXVSeparateAVLatent\" }\n  },\n  \"54\": {\n    \"inputs\": {\n      \"samples\": [\"53\", 0],\n      \"upscale_model\": [\"23\", 0],\n      \"vae\": [\"22\", 0]\n    },\n    \"class_type\": \"LTXVLatentUpsampler\",\n    \"_meta\": { \"title\": \"Spatial LTX Latent Upsampler\" }\n  },\n  \"61\": {\n    \"inputs\": {\n      \"noise_seed\": 972047332644367\n    },\n    \"class_type\": \"RandomNoise\",\n    \"_meta\": { \"title\": \"RandomNoise\" }\n  },\n  \"62\": {\n    \"inputs\": {\n      \"noise\": [\"61\", 0],\n      \"guider\": [\"63\", 0],\n      \"sampler\": [\"64\", 0],\n      \"sigmas\": [\"65\", 0],\n      \"latent_image\": [\"66\", 0]\n    },\n    \"class_type\": \"SamplerCustomAdvanced\",\n    \"_meta\": { \"title\": \"SamplerCustomAdvanced\" }\n  },\n  \"63\": {\n    \"inputs\": {\n      \"cfg\": 1,\n      \"model\": [\"30\", 0],\n      \"positive\": [\"17\", 0],\n      \"negative\": [\"17\", 1]\n    },\n    \"class_type\": \"CFGGuider\",\n    \"_meta\": { \"title\": \"CFG Guider\" }\n  },\n  \"64\": {\n    \"inputs\": {\n      \"sampler_name\": \"euler_ancestral\"\n    },\n    \"class_type\": \"KSamplerSelect\",\n    \"_meta\": { \"title\": \"KSamplerSelect\" }\n  },\n  \"65\": {\n    \"inputs\": {\n      \"sigmas\": \"0.85, 0.7250, 0.4219, 0.0\"\n    },\n    \"class_type\": \"ManualSigmas\",\n    \"_meta\": { \"title\": \"ManualSigmas\" }\n  },\n  \"66\": {\n    \"inputs\": {\n      \"video_latent\": [\"54\", 0],\n      \"audio_latent\": [\"53\", 1]\n    },\n    \"class_type\": \"LTXVConcatAVLatent\",\n    \"_meta\": { \"title\": \"LTXVConcatAVLatent\" }\n  },\n  \"67\": {\n    \"inputs\": {\n      \"av_latent\": [\"62\", 1]\n    },\n    \"class_type\": \"LTXVSeparateAVLatent\",\n    \"_meta\": { \"title\": \"LTXVSeparateAVLatent\" }\n  },\n  \"68\": {\n    \"inputs\": {\n      \"samples\": [\"53\", 1],\n      \"audio_vae\": [\"21\", 0]\n    },\n    \"class_type\": \"LTXVAudioVAEDecode\",\n    \"_meta\": { \"title\": \"LTXV Audio VAE Decode\" }\n  },\n  \"69\": {\n    \"inputs\": {\n      \"fps\": [\"40\", 0],\n      \"bit_depth\": 8,\n      \"images\": [\"70\", 0],\n      \"audio\": [\"68\", 0]\n    },\n    \"class_type\": \"CreateVideo\",\n    \"_meta\": { \"title\": \"Create Video\" }\n  },\n  \"70\": {\n    \"inputs\": {\n      \"samples\": [\"67\", 0],\n      \"vae\": [\"22\", 0]\n    },\n    \"class_type\": \"VAEDecode\",\n    \"_meta\": { \"title\": \"LTXV Video VAE Decode\" }\n  },\n  \"71\": {\n    \"inputs\": {\n      \"filename_prefix\": \"Video/LTX-2\",\n      \"format\": \"mp4\",\n      \"codec\": \"auto\",\n      \"video\": [\"69\", 0]\n    },\n    \"class_type\": \"SaveVideo\",\n    \"_meta\": { \"title\": \"Save Video\" }\n  },\n  \"72\": {\n    \"inputs\": {\n      \"any_input\": [\"69\", 0],\n      \"webhook_url\": \"https://n8n.viralscitechhub.com/webhook/5d795dd1-1a65-4729-bc3c-2c74bcb4db8f\",\n      \"additional_info\": \"{\\\"status\\\":\\\"complete\\\"}\"\n    },\n    \"class_type\": \"WebhookNotifierAnyNode\",\n    \"_meta\": { \"title\": \"Webhook Notifier (Any)\" }\n  }\n}",
+        "outputFormat": "raw",
+        "timeout": 1400
+      },
+      "type": "n8n-nodes-comfyui.comfyui",
+      "typeVersion": 1,
+      "position": [
+        2272,
+        224
+      ],
+      "id": "df4b93b2-f926-45e9-b4e8-dc5916860ca8",
+      "name": "ComfyUI1",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "comfyUIApi": {
+          "id": "r89MkjpTCFeQTjAN",
+          "name": "ComfyUI account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "5845124726",
+        "message": "=Hii, your video is ready and uploaded to cloud please verify it and response quickly\nhere is link for the video :\n {{ $json.url }}",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2720,
+        80
+      ],
+      "id": "ef6841e8-d62e-425a-9c02-f3da9a3c7ada",
+      "name": "Send message and wait for response1",
+      "webhookId": "19e1fa47-0759-435a-9783-a1215332e9b7",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "fZvMgGekTMumwO0B",
+          "name": "Telegram account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "01893461-00a1-4c7a-8764-522d5a63b785",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2944,
+        80
+      ],
+      "id": "4376f0cb-69f7-46e0-82cb-8a1016dcb2aa",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "17841416376058313",
+        "edge": "media",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "video_url",
+                "value": "={{ $('Upload an asset from file data').item.json.url }}"
+              },
+              {
+                "name": "caption",
+                "value": "news for sri ganganagar"
+              },
+              {
+                "name": "media_type",
+                "value": "REELS"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        80
+      ],
+      "id": "78cfb61d-2867-4f5f-acb9-c5839011a49b",
+      "name": "Facebook Graph API2",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "3ZceJpWxXPUVEpY3",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v23.0",
+        "node": "17841416376058313",
+        "edge": "media_publish",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "creation_id",
+                "value": "={{ $json.id }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        3616,
+        0
+      ],
+      "id": "e95ef479-a70a-417b-a658-32746c5d929f",
+      "name": "Facebook Graph API3",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 3,
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "3ZceJpWxXPUVEpY3",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "uploadFile",
+        "resource_type_file": "video",
+        "additionalFieldsFile": {
+          "folder": "Reels"
+        }
+      },
+      "type": "n8n-nodes-cloudinary.cloudinary",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        144
+      ],
+      "id": "33803549-a189-422f-a399-4e9d478b962c",
+      "name": "Upload an asset from file data",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "cloudinaryApi": {
+          "id": "EIj4p8Xk2eFx0eAF",
+          "name": "Cloudinary account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": 120
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3392,
+        0
+      ],
+      "id": "2704926b-c210-4e1a-bfd1-7ea6e166beac",
+      "name": "Wait1",
+      "webhookId": "c3ab3441-3042-45b1-a3a4-6f21158ec729"
+    },
+    {
+      "parameters": {
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1696,
+        224
+      ],
+      "id": "4aa853f0-ac5d-4396-ad65-1e771e59ba47",
+      "name": "Wait2",
+      "webhookId": "ad69f523-41f5-4351-87b7-475c98c9555e"
+    },
+    {
+      "parameters": {
+        "chatId": "5845124726",
+        "text": "=⚠️ Image analysis failed for one page (image_number: {{ $json.image_number ?? 'unknown' }}).\nError: {{ $json.error?.message || JSON.stringify($json).slice(0,300) }}\n\nThis page was skipped. The other pages continue processing normally — no action needed unless every page fails.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -448,
+        1328
+      ],
+      "id": "92571228-9888-4a2e-90e5-eec0c7d4b57b",
+      "name": "Notify - Image Analysis Error",
+      "webhookId": "1ea80d63-4942-4529-b3b2-3236b2e12036",
+      "credentials": {
+        "telegramApi": {
+          "id": "fZvMgGekTMumwO0B",
+          "name": "Telegram account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5845124726",
+        "text": "=🛑 Error while processing article: \"{{ $json.title || $json.results?.[0]?.title || 'unknown title' }}\"\nFailed node output: {{ $json.error?.message || JSON.stringify($json).slice(0,300) }}\n\nThis article was skipped and the pipeline is continuing with the next one. Check the n8n execution log to reprocess it manually if needed.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3840,
+        448
+      ],
+      "id": "0318b523-8dde-4c09-a7bb-41686a745967",
+      "name": "Notify - Article Pipeline Error",
+      "webhookId": "8f8368e0-055b-4540-82e3-6d7c9332bb6d",
+      "credentials": {
+        "telegramApi": {
+          "id": "fZvMgGekTMumwO0B",
+          "name": "Telegram account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const binary = $input.item.binary;\nconst firstKey = Object.keys(binary || {})[0];\nif (!firstKey) {\n  throw new Error('ComfyUI1 returned no binary video data - check its output tab.');\n}\nconst ts = Date.now();\nreturn {\n  json: {\n    ...$input.item.json,\n    inputPath: `/media/reel-processing/${ts}-input.mp4`,\n    outputPath: `/media/reel-processing/${ts}-output.mp4`\n  },\n  binary: { video: binary[firstKey] }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        620
+      ],
+      "id": "0a7607a9-2a9c-4ee2-bae0-71ee648f556d",
+      "name": "Normalize Video Binary"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.inputPath }}",
+        "dataPropertyName": "video",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2540,
+        620
+      ],
+      "id": "6432f3df-e462-417c-880a-55a06293b40b",
+      "name": "Write Video To Disk"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const inputPath = $('Normalize Video Binary').item.json.inputPath;\nconst outputPath = $('Normalize Video Binary').item.json.outputPath;\nconst title = $('Code in JavaScript2').item.json.title || '';\n\nconst sanitize = (s) => (s || '')\n  .replace(/[:'\"\\\\%$`]/g, '')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst FONT_PATH = '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf';\nconst escapePath = (s) => s.replace(/'/g, `'\\\\''`);\n\nconst headerText = 'Sri Ganganagar';\nconst tickerText = sanitize(title) + '     \\u2022     ';\nconst tickerSpeed = 120;\n\nconst headerDrawtext = `drawtext=fontfile='${FONT_PATH}':text='${headerText}':fontsize=70:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=14:x=(w-text_w)/2:y=50`;\n\nconst tickerDrawtext = `drawtext=fontfile='${FONT_PATH}':text='${tickerText}':fontsize=38:fontcolor=white:borderw=2:bordercolor=black:box=1:boxcolor=black@0.45:boxborderw=10:x=w-mod(t*${tickerSpeed}\\\\,w+text_w):y=h-text_h-60`;\n\nconst command = `ffmpeg -y -i '${escapePath(inputPath)}' -vf \"${headerDrawtext},${tickerDrawtext}\" -c:a copy '${escapePath(outputPath)}'`;\n\nreturn { json: { command, outputPath } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        620
+      ],
+      "id": "2a66845a-a1c9-42e7-9c07-fc2a2daff2e7",
+      "name": "Build FFmpeg Overlay Command"
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.command }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2980,
+        620
+      ],
+      "id": "37f2a6ff-4f8e-4b74-a2b5-a42ab2e62c6b",
+      "name": "Run FFmpeg Overlay"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Build FFmpeg Overlay Command').item.json.outputPath }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3200,
+        620
+      ],
+      "id": "27bcde53-b1b0-4b4b-96dc-d556f23f6c33",
+      "name": "Read Final Reel Video"
+    }
+  ],
+  "pinData": {
+    "Analyze an image": [
+      {
+        "json": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n\"total_articles\": 15,\n\"overall_summary_hindi\": \"आज के श्रीगंगानगर भास्कर में एक 12 वर्षीय बालिका से दुराचार के मामले में तीन होटलों पर जेसीबी कार्रवाई प्रमुख खबर है, जिसके बाद होटलों में सुरक्षा मानकों की कमी और लाइसेंस उल्लंघन पर भास्कर की विशेष पड़ताल भी सामने आई। जुलाई महीने के लिए मिलाजुला मौसम, जिसमें आंधी और झमाझम मानसून दोनों की संभावना है, की मौसमवाणी भी दी गई है। इसके अतिरिक्त, हाईकोर्ट ने एक प्रशासनिक अधिकारी को पद से हटाने के आदेश पर रोक लगाई, जबकि उपखंड मजिस्ट्रेट कोर्ट ने एक बच्चे की अभिरक्षा पिता को सौंपी। साइबर अपराधों में बड़ी वृद्धि पर एक विस्तृत रिपोर्ट भी प्रकाशित हुई है, जिसमें राजस्थान में लाखों शिकायतें और करोड़ों का नुकसान बताया गया है। अन्य खबरों में ट्रेन में बिना टिकट यात्रा पर जुर्माना बढ़ने, पासपोर्ट फीस में वृद्धि, एक दुकान कर्मी द्वारा 16 लाख की चोरी और रहमान डिप्रेशन के पानी का घग्गर नदी में पहुंचने की जानकारी शामिल है। विभिन्न विभागों में भर्तियों और डिजिटल परामर्श सेवाओं की शुरुआत जैसी छोटी खबरें भी हैं।\",\n\"overall_summary_english\": \"Today's Sriganganagar Bhaskar prominently features the JCB action on three hotels following an alleged assault case involving a 12-year-old girl, complemented by a Bhaskar investigation revealing widespread safety standard deficiencies and license violations in hotels. The July weather forecast predicts a mixed month of storms, humidity, and heavy monsoon rains. Additionally, the High Court stayed an order to remove an administrative officer, while a Sub-Divisional Magistrate Court granted child custody to the father. A detailed report on the surge in cybercrime highlights millions of rupees lost and numerous complaints in Rajasthan. Other news includes increased fines for traveling without a train ticket, a hike in passport application fees, a shop employee arrested for stealing Rs 16 lakh in jewelry, and water from the Rahman depression reaching the Ghaggar river. Briefs on various recruitments and the initiation of digital consultation services in healthcare are also covered.\",\n\"articles\": [\n{\n\"article_title\": \"12 साल की बालिका से दुराचार मामला: अलसुबह 3 होटलों पर चली जेसीबी\",\n\"article_title_english\": \"JCB Action Taken on Three Hotels Early Morning Following Alleged Assault Case of 12-Year-Old Girl\",\n\"hindi_summary\": \"श्रीगंगानगर में 13 वर्षीय बालिका से दुराचार के मामले में पुलिस और प्रशासन ने कठोर कार्रवाई की है। बुधवार तड़के 3 बजे पुलिस और प्रशासनिक अमले ने तीन होटलों, होटल जॉय इन, होटल ड्रीम (खुगर) और होटल सफायर पर जेसीबी मशीन चलाकर कार्रवाई की। इस कार्रवाई से होटल संचालकों में हड़कंप मच गया है। पुलिस ने मामले की गंभीरता को देखते हुए यह कदम उठाया है, ताकि ऐसे अपराधों पर अंकुश लगाया जा सके।\",\n\"english_summary\": \"In Shriganganagar, police and administration took strict action following the alleged assault of a 13-year-old girl. Early Wednesday morning at 3 AM, JCB machines demolished parts of three hotels – Hotel Joy Inn, Hotel Dream (Khugar), and Hotel Sapphire. This swift action has caused a stir among hotel owners. Police undertook this measure seriously to curb such crimes and ensure public safety.\"\n},\n{\n\"article_title\": \"भास्कर पड़ताल: होटलों में सुरक्षा से खिलवाड़; 132 की जांच, 132 के पास पर्यटन लाइसेंस नहीं, 73 में ई-विजिटर एप बंद\",\n\"article_title_english\": \"Bhaskar Investigation Reveals Safety Lapses in Hotels: 132 Inspected, None Have Tourism License, E-Visitor App Off in 73\",\n\"hindi_summary\": \"भास्कर पड़ताल में सामने आया है कि श्रीगंगानगर शहर के सदर, पुरानी आबादी, जवाहरनगर और कोतवाली थाना क्षेत्रों के होटलों में सुरक्षा मानकों की अनदेखी की जा रही है। पुलिस की जांच में 132 होटलों में से किसी के पास पर्यटन लाइसेंस नहीं मिला, और 73 होटलों में ई-विजिटर ऐप भी बंद पाया गया, जिससे मेहमानों का रिकॉर्ड नहीं रखा जा रहा था। पुलिस रिपोर्ट के अनुसार, 35 होटलों में फायर सिस्टम नहीं मिला और 70 होटलों में फूड व लेबर लाइसेंस नहीं थे। ये कमियां शहर में सुरक्षा के लिए गंभीर चिंता का विषय हैं।\",\n\"english_summary\": \"A Bhaskar investigation revealed significant safety negligence in hotels across Sriganganagar's Sadar, Purani Abadi, Jawaharnagar, and Kotwali police station areas. Out of 132 hotels inspected, none possessed a tourism license, and the e-visitor app for guest record-keeping was inactive in 73 establishments. The police report further indicated that 35 hotels lacked a fire system, and 70 did not have food or labor licenses. These deficiencies raise serious concerns for the city's safety.\"\n},\n{\n\"article_title\": \"जुलाई माह की मौसमवाणी: कभी आंधी-उमस, तो कभी झमाझम बरसेगा मानसून\",\n\"article_title_english\": \"July Weather Forecast: Monsoon to Bring Alternating Storms, Humidity, and Heavy Rains\",\n\"hindi_summary\": \"श्रीगंगानगर इलाके के लिए जुलाई का महीना मिलाजुला मौसम लेकर आएगा। महीने की शुरुआत भीषण गर्मी, धूल भरी आंधी और लू के साथ होगी। 5 से 7 जुलाई के बीच मानसून की एंट्री के साथ मौसम का मिजाज पूरी तरह बदल जाएगा। पहले सप्ताह में गर्मी और मानसून की संभावना है, जबकि दूसरे सप्ताह में मानसून का तापमान व राहत दिखेगी। तीसरे सप्ताह में सबसे नम समय होगा और लगातार बारिश होगी, वहीं चौथे सप्ताह में मिलाजुला मौसम रहेगा और महीने के अंत में एक और दौर की बारिश की उम्मीद है।\",\n\"english_summary\": \"The month of July is expected to bring mixed weather to the Sriganganagar region. The beginning of the month will see intense heat, dust storms, and heatwaves. The weather will change significantly between July 5th and 7th with the arrival of the monsoon. The first week is forecast for heat and monsoon, followed by relief and monsoon activity in the second week. The third week will be the most humid with continuous rainfall, while the fourth week will have mixed weather with another spell of rain expected towards the end of the month.\"\n},\n{\n\"article_title\": \"भैरूपुरा सिलवानी की प्रशासनिक खलेरी को पद से हटाने के आदेश पर रोक\",\n\"article_title_english\": \"High Court Stays Order to Remove Bhairupura Silwani Administrative Officer\",\n\"hindi_summary\": \"राजस्थान हाईकोर्ट ने जयपुर पीठ में ग्राम पंचायत भैरूपुरा सिलवानी की प्रशासनिक खलेरी श्रीमती द्रोपती खलेरी को पद से हटाने के राज्य सरकार के आदेश पर अंतरिम रोक लगा दी है। जस्टिस आनंद शर्मा की पीठ ने राज्य सरकार सहित संबंधित प्रतिवादियों को तीन सप्ताह में जवाब देने के लिए नोटिस जारी किया। उल्लेखनीय है कि राज्य सरकार ने अनियमितताओं के आरोपों के आधार पर 15 जून को द्रोपती खलेरी को प्रशासनिक पद से हटा दिया था।\",\n\"english_summary\": \"The Rajasthan High Court, Jaipur bench, has issued an interim stay on the state government's order to remove Ms. Dropati Khaleri, the administrative officer of Gram Panchayat Bhairupura Silwani. Justice Anand Sharma's bench issued notices to the state government and concerned respondents, seeking their replies within three weeks. It is noteworthy that the state government had removed Dropati Khaleri from her administrative position on June 15th, citing allegations of irregularities.\"\n},\n{\n\"article_title\": \"उपखंड मजिस्ट्रेट कोर्ट ने डेढ़ वर्षीय बच्चे की अभिरक्षा पिता को सौंपी\",\n\"article_title_english\": \"Sub-Divisional Magistrate Court Grants Custody of One-and-a-Half-Year-Old Child to Father\",\n\"hindi_summary\": \"उपखंड मजिस्ट्रेट न्यायालय ने एक पारिवारिक विवाद के मामले में सुनवाई करते हुए डेढ़ वर्षीय बच्चे की अभिरक्षा (कस्टडी) उसके पिता को सौंपने का आदेश पारित किया है। मामले में महिला पक्षकार किरण ने आरोप लगाया था कि उसके पति, सास और ससुर ने मार-पीट की। पुलिस ने बच्चे को न्यायालय में पेश किया। दोनों पक्षों की दलीलें सुनने के बाद कोर्ट ने पिता को बच्चे की कस्टडी देने का आदेश दिया।\",\n\"english_summary\": \"The Sub-Divisional Magistrate Court, after hearing a family dispute case, has ordered the custody of a one-and-a-half-year-old child to be given to the father. The female litigant, Kiran, had alleged that her husband, mother-in-law, and father-in-law had assaulted her. The police presented the child in court. After listening to arguments from both sides, the court ordered the child's custody to be granted to the father.\"\n},\n{\n\"article_title\": \"साइबर क्राइम: 1.48 लाख शिकायतें, 91% में ठगे गए रुपए\",\n\"article_title_english\": \"Cybercrime Soars: 1.48 Lakh Complaints, 91% of Victims Lost Money\",\n\"hindi_summary\": \"भारत में साइबर ठगी के मामले तेजी से बढ़ रहे हैं, जहां पिछले 5 सालों में 55649 करोड़ रुपए ठगे जा चुके हैं। राजस्थान में अकेले पिछले साल 1.48 लाख शिकायतें दर्ज हुईं, जिनमें से 91.5% अपराध ऑनलाइन वित्तीय धोखाधड़ी के थे। गृह मंत्रालय के आंकड़ों के अनुसार, 40% रिव्यू-रेटिंग और टास्क फ्रॉड के तहत थे। साइबर अपराधी बेरोजगारों को घर बैठे काम का झांसा देकर फंसाते हैं, जिसमें उन्हें 30-35 हजार रुपए कमाने का लालच दिया जाता है। लोगों को ओटीपी या पासवर्ड शेयर न करने की सलाह दी गई है।\",\n\"english_summary\": \"Cyber fraud cases are rapidly increasing in India, with 55,649 crore rupees stolen over the past five years. Rajasthan alone registered 1.48 lakh complaints last year, with 91.5% involving online financial fraud. According to Ministry of Home Affairs data, 40% of these cases were related to review-rating and task fraud. Cybercriminals lure unemployed individuals with promises of work-from-home jobs, tempting them with offers of earning Rs 30-35 thousand. People are advised not to share OTPs or passwords.\"\n},\n{\n\"article_title\": \"टिकट के बिना रेल यात्रा पर अब देना होगा 500 रु. जुर्माना\",\n\"article_title_english\": \"Traveling Without a Train Ticket Now Incurs a Rs 500 Fine\",\n\"hindi_summary\": \"1 जुलाई से रेलवे के नए नियम लागू हो गए हैं, जिसके तहत बिना टिकट यात्रा करने पर न्यूनतम जुर्माना 250 रुपए से बढ़ाकर 500 रुपए कर दिया गया है। पहले पूरे किराए के साथ 250 रुपए का जुर्माना लिया जाता था। इसके अलावा, यात्रियों को टिकट पर अपना ई-मेल आईडी और आधार लिंक कराना अनिवार्य होगा, जिसे 31 दिसंबर 2026 तक अपडेट किया जा सकता है। इससे यह सुनिश्चित होगा कि टिकट नकली नहीं हैं।\",\n\"english_summary\": \"New railway rules, effective July 1st, have doubled the minimum fine for traveling without a ticket from Rs 250 to Rs 500. Previously, the fine was Rs 250 in addition to the full fare. Furthermore, passengers must now link their email ID and Aadhaar to their ticket by December 31, 2026, to ensure the authenticity of their tickets.\"\n},\n{\n\"article_title\": \"पासपोर्ट बनवाने की फीस 2500 रुपए हुई\",\n\"article_title_english\": \"Passport Application Fee Increased to Rs 2500\",\n\"hindi_summary\": \"केंद्र सरकार ने पासपोर्ट बनवाने की फीस में वृद्धि कर दी है। अब सामान्य पासपोर्ट के लिए यह फीस 2500 रुपए और तत्काल पासपोर्ट के लिए 5000 रुपए हो गई है। पहले सामान्य पासपोर्ट की फीस 1500 रुपए और तत्काल के लिए 3500 रुपए थी। 18 वर्ष से कम उम्र के बच्चों के पासपोर्ट की फीस भी बढ़ी है, जिसके बाद अब उन्हें 2500 रुपए देने होंगे।\",\n\"english_summary\": \"The central government has increased passport application fees. The fee for a regular passport is now Rs 2500, up from Rs 1500, and for a Tatkal (urgent) passport, it is Rs 5000, up from Rs 3500. The fees for children under 18 have also increased, now requiring Rs 2500.\"\n},\n{\n\"article_title\": \"दुकान कर्मी ने चुराए 16 लाख के गहने, पकड़ा गया\",\n\"article_title_english\": \"Shop Employee Arrested for Stealing Jewelry Worth Rs 16 Lakh\",\n\"hindi_summary\": \"श्रीगंगानगर में गुसाईं की पूर्व अध्यक्ष सीमा पेड़ीवाल के घर से बुधवार रात 3 बजे एक दुकान कर्मी ने 16 लाख रुपए के गहने चुरा लिए। पुलिस ने तुरंत कार्रवाई करते हुए दुकान कर्मी राजेश कुमार को उसके घर से गहनों के साथ पकड़ लिया। राजेश सात साल से पेड़ीवाल के यहां काम कर रहा था। चोरी के पीछे का मकसद और कोई साथी शामिल है या नहीं, इसकी जांच की जा रही है।\",\n\"english_summary\": \"In Sriganganagar, a shop employee stole jewelry worth Rs 16 lakh from the house of former Gusai President Seema Pediwal at 3 AM on Wednesday night. Police acted swiftly and arrested the employee, Rajesh Kumar, from his home with the stolen jewelry. Rajesh had been working for Pediwal for seven years. Further investigation is underway to determine the motive behind the theft and if any accomplices were involved.\"\n},\n{\n\"article_title\": \"रहमन डिप्रेशन का पानी घघर में पहुंचा\",\n\"article_title_english\": \"Water from Rahman Depression Reaches Ghaggar River\",\n\"hindi_summary\": \"श्रीगंगानगर में पिछले दिनों हुई भारी बारिश के बाद रहमन डिप्रेशन का पानी नेशनल हाईवे पुल से आगे निकलकर घग्गर नदी में पहुंच गया है। मंगलवार शाम तक यह पानी भैरूपुरा सिलवानी क्रॉस कर गया। सिंचाई विभाग ने पानी को नियंत्रित रूप से छोड़ा है, जिससे धान उत्पादक किसानों को लाभ मिलेगा। खेत में पानी की उपलब्धता से धान की रोपाई के कार्य में तेजी आएगी। उम्मीद है कि बेहतर उत्पादन होगा।\",\n\"english_summary\": \"Following heavy rainfall in Sriganganagar in recent days, water from the Rahman depression has overflowed past the National Highway bridge and reached the Ghaggar river. By Tuesday evening, the water had crossed Bhairupura Silwani. The Irrigation Department has released the water in a controlled manner, which is expected to benefit paddy farmers. The availability of water will accelerate paddy sowing, leading to hopes of better yields.\"\n},\n{\n\"article_title\": \"न्यू इंडिया इंश्योरेंस में 550 पदों पर भर्ती, आवेदन शुरू\",\n\"article_title_english\": \"New India Assurance Opens Applications for 550 Posts\",\n\"hindi_summary\": \"न्यू इंडिया इंश्योरेंस कंपनी लिमिटेड ने 550 पदों पर भर्ती के लिए आवेदन आमंत्रित किए हैं। इच्छुक उम्मीदवार 7 जुलाई तक newindia.co.in पर ऑनलाइन आवेदन कर सकते हैं। इन पदों के लिए किसी भी विषय में स्नातक डिग्री होना आवश्यक है।\",\n\"english_summary\": \"New India Assurance Company Limited has invited applications for 550 posts. Interested candidates can apply online at newindia.co.in until July 7th. A graduate degree in any discipline is required for these positions.\"\n},\n{\n\"article_title\": \"टेक्निकल असिस्टेंट के आवेदन 15 जुलाई तक\",\n\"article_title_english\": \"Technical Assistant Applications Open Until July 15\",\n\"hindi_summary\": \"दिल्ली अधीनस्थ सेवा चयन बोर्ड (DSSSB) ने टीजीटी और टेक्निकल असिस्टेंट सहित तमाम पदों पर भर्ती के लिए आवेदन प्रक्रिया शुरू कर दी है। उम्मीदवार dssbonline.nic.in के माध्यम से 15 जुलाई तक ऑनलाइन आवेदन कर सकते हैं।\",\n\"english_summary\": \"The Delhi Subordinate Services Selection Board (DSSSB) has commenced the application process for various posts, including TGT and Technical Assistant. Candidates can apply online through dssbonline.nic.in until July 15.\"\n},\n{\n\"article_title\": \"वीएमओयूः प्रवेश सत्र -26 के ऑनलाइन आवेदन शुरू\",\n\"article_title_english\": \"VMOU: Online Applications Begin for Admission Session-26\",\n\"hindi_summary\": \"वर्धमान महावीर खुला विश्वविद्यालय (VMOU), श्रीगंगानगर में प्रवेश सत्र 2026 के लिए ऑनलाइन आवेदन प्रक्रिया शुरू हो गई है। इच्छुक विद्यार्थी सभी यूजी, पीजी, डिप्लोमा और सर्टिफिकेट पाठ्यक्रमों (डीएनएईएस सहित) में प्रवेश के लिए ऑनलाइन आवेदन कर सकते हैं।\",\n\"english_summary\": \"Vardhman Mahaveer Open University (VMOU), Sriganganagar, has started the online application process for the admission session 2026. Interested students can apply online for admission to all UG, PG, Diploma, and Certificate courses, including DNAES.\"\n},\n{\n\"article_title\": \"पीएचसी पर अब दिए जाएंगे डिजिटल परामर्श\",\n\"article_title_english\": \"Digital Consultations to be Provided at PHCs\",\n\"hindi_summary\": \"श्रीगंगानगर के चिकित्सा विभाग ने ग्रामीण क्षेत्र की स्वास्थ्य सेवाओं को डिजिटल बनाने की दिशा में एक कदम उठाया है। अब सभी पीएचसी पर डिजिटल परामर्श दिए जाएंगे। इसके अतिरिक्त, रिकॉर्ड में भी शत-प्रतिशत डिजिटल परामर्श दर्ज करना होगा, जिससे स्वास्थ्य सेवाओं की गुणवत्ता और पहुंच में सुधार होगा।\",\n\"english_summary\": \"Sriganganagar's Health Department has taken a step towards digitizing healthcare services in rural areas. All Primary Health Centers (PHCs) will now provide digital consultations. Additionally, 100% of digital consultations must be recorded, aiming to improve the quality and accessibility of health services.\"\n},\n{\n\"article_title\": \"वीबी जीरामजी योजना का शुभारंभ आज होगा\",\n\"article_title_english\": \"VB Jiramji Yojana to be Launched Today\",\n\"hindi_summary\": \"सुनागढ़ ग्राम पंचायत में बुधवार को वीबी जीरामजी योजना का शुभारंभ किया जाएगा। कार्यक्रम में जिला कलेक्टर अमित यादव व विधायक गुरवीर बराड़ सहित जनप्रतिनिधि व अधिकारीगण उपस्थित रहेंगे। यह योजना ग्रामीण विकास और जन कल्याण को बढ़ावा देने के उद्देश्य से शुरू की जा रही है।\",\n\"english_summary\": \"The VB Jiramji Yojana will be launched today in Sunagarh Gram Panchayat on Wednesday. The event will be attended by District Collector Amit Yadav, MLA Gurveer Barar, and other public representatives and officials. This scheme is being launched with the objective of promoting rural development and public welfare.\"\n}\n]\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 779,
+            "candidatesTokenCount": 4056,
+            "totalTokenCount": 11134,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 521
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 258
+              }
+            ],
+            "thoughtsTokenCount": 6299,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "g-pFas6fOoicjuMP_ZbemA8"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      },
+      {
+        "json": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n\"total_articles\": 13,\n\"overall_summary_hindi\": \"आज के श्रीगंगानगर भास्कर में महिला सुरक्षा, छात्रों की उपलब्धियों और नागरिक सुविधाओं से जुड़े कई महत्वपूर्ण समाचार प्रकाशित हुए हैं। एसपी ने महिला सुरक्षा पर निर्देश दिए और कलेक्टर ने अवैध होटल गतिविधियों पर कार्रवाई की चेतावनी दी। एक छात्रा मुस्कान कपूर ने नेशनल फाइनेंस ओलंपियाड में उत्कृष्ट प्रदर्शन कर शहर का नाम रोशन किया। नर्सेस एसोसिएशन ने कैंडल मार्च निकाल कर नौकरी बहाली की मांग की, जबकि शिक्षकों ने ग्रीष्मावकाश कटौती के आदेश का विरोध किया। जिला प्रशासन ने यूआईटी में कर्मचारियों की प्रतिनियुक्ति कर जन राहत प्रदान की और पूर्व विधायक ने शहर की बदहाल नागरिक व्यवस्थाओं पर सवाल उठाए। इसके साथ ही, गंगनहर के संभावित वरीयताक्रम की जानकारी और दैनिक भास्कर के आगामी प्रतिभा सम्मान समारोह के पंजीकरण की सूचना भी दी गई।\",\n\"overall_summary_english\": \"Today's Sri Ganganagar Bhaskar features several important news items related to women's safety, student achievements, and civic amenities. The SP issued directives on women's safety, while the Collector warned of action against illegal hotel activities. Student Muskaan Kapoor brought pride to the city with her outstanding performance in the National Finance Olympiad. The Nurses Association held a candle march demanding job reinstatements, and teachers protested the summer vacation cut order. The district administration deployed staff to UIT to provide public relief, and a former MLA raised concerns about the city's poor civic infrastructure. Additionally, information on the probable priority order of the Gang Canal and details about Dainik Bhaskar's upcoming talent recognition ceremony were published.\",\n\"articles\": [\n{\n\"article_title\": \"बालिका से दुष्कर्म मामले में पुलिस-प्रशासन सशक्त • एसपी महिला सुरक्षा पर पुलिस लाइन में संपर्क सभा कर एसपी ने दिए निर्देश • कलेक्टर ने चेताया: अवैध गतिविधियों में लिप्त होटलों पर कार्रवाई होगी\",\n\"article_title_english\": \"SP Issues Directives on Women's Safety; Collector Warns Hotels Involved in Illegal Activities\",\n\"hindi_summary\": \"श्रीगंगानगर में बालिका से दुष्कर्म मामले को लेकर पुलिस-प्रशासन सशक्त हुआ है। एसपी हरीशंकर की अध्यक्षता में पुलिस लाइन में महिला व बालिका सुरक्षा पर संपर्क सभा हुई, जिसमें सुरक्षा व्यवस्था मजबूत करने के निर्देश दिए गए। सांसद इंदोरा ने त्वरित कार्रवाई की सराहना करते हुए अपराधियों को सख्त सजा की मांग की। वहीं, कलेक्टर डॉ. अमित यादव ने होटल एसोसिएशन के पदाधिकारियों के साथ बैठक कर अवैध गतिविधियों में लिप्त होटलों पर कड़ी कार्रवाई की चेतावनी दी और संयुक्त निरीक्षण अभियान चलाने को कहा।\",\n\"english_summary\": \"In Sri Ganganagar, police and administration have taken strong action following a rape case involving a minor. A meeting was held at the police line, chaired by SP Harishankar, to discuss women and girl child safety, where directives were issued to strengthen security arrangements. MP Indora praised the swift police action and demanded severe punishment for the culprits. Separately, Collector Dr. Amit Yadav met with hotel association officials, warning of strict action against hotels involved in illegal activities and announcing joint inspection drives.\",\n\"category\": \"Law and Order\"\n},\n{\n\"article_title\": \"मुस्कान ने 100% अंक अर्जित कर 'सर्टिफिकेट ऑफ आउटस्टैंडिंग परफॉर्मर' अपने नाम किया • 20 मिनट में फाइनेंस के सवाल हल कर मुस्कान ने नेशनल फाइनेंस ओलंपियाड में एआईआर-2 प्राप्त किए\",\n\"article_title_english\": \"Muskaan Kapoor Achieves 100% Marks, Secures All India Rank 2 in National Finance Olympiad\",\n\"hindi_summary\": \"श्रीगंगानगर की छात्रा मुस्कान कपूर ने नेशनल फाइनेंस ओलंपियाड (NFO) में उत्कृष्ट प्रदर्शन करते हुए 100% अंक प्राप्त किए हैं। उन्होंने मात्र 20 मिनट में सभी सवालों को हल कर राष्ट्रीय स्तर पर द्वितीय स्थान (AIR-2) हासिल किया और 'सर्टिफिकेट ऑफ आउटस्टैंडिंग परफॉर्मर' अपने नाम किया। उनके इस प्रदर्शन को स्कूल के प्राचार्य व निदेशक ने सराहा, जिससे मुस्कान के परिजन और शहरवासी भी गौरवान्वित महसूस कर रहे हैं।\",\n\"english_summary\": \"Muskaan Kapoor, a student from Sri Ganganagar, has achieved an outstanding performance in the National Finance Olympiad (NFO) by securing 100% marks. She solved all questions in just 20 minutes, earning her the All India Rank 2 and the 'Certificate of Outstanding Performer'. Her school's principal and director praised her achievement, bringing pride to her family and the city.\",\n\"category\": \"Education\"\n},\n{\n\"article_title\": \"नर्सेस एसो. ने निकाला कैंडल मार्च\",\n\"article_title_english\": \"Nurses Association Organizes Candle March\",\n\"hindi_summary\": \"राजस्थान नर्सेस एसोसिएशन की जिला शाखा ने श्रीगंगानगर में कैंडल मार्च निकाला। यह मार्च उन मेडिकल नर्सेस की सेवाओं की अचानक समाप्ति के विरोध में था। नर्सेस ने मांग की कि उन्हें योग्यता और वरिष्ठता के आधार पर बहाल किया जाए। उन्होंने गंगनहर मेडिकल कॉलेज से हटाए गए 11 नर्सेस की बहाली की भी मांग की, जहां करीब 50 पद खाली पड़े हैं।\",\n\"english_summary\": \"The district branch of the Rajasthan Nurses Association organized a candle march in Sri Ganganagar to protest the abrupt termination of services for medical nurses. The nurses demanded their reinstatement based on merit and seniority. They also sought the reinstatement of 11 nurses removed from Ganganagar Medical College, highlighting that around 50 positions remain vacant there.\",\n\"category\": \"Protest\"\n},\n{\n\"article_title\": \"बाबा रामदेव के नाम पर अश्लील गीतों के विरोध में सौंपा ज्ञापन\",\n\"article_title_english\": \"Memorandum Submitted Against Obscene Songs Using Baba Ramdev's Name\",\n\"hindi_summary\": \"पतंजलि संस्थान के प्रतिनिधियों ने श्रीगंगानगर कलेक्टर को एक ज्ञापन सौंपा, जिसमें बाबा रामदेव के नाम पर अश्लील गीतों के खिलाफ कार्रवाई की मांग की गई। उन्होंने ऐसे गीतों के माध्यम से सार्वजनिक अश्लीलता फैलाने वाले तत्वों के खिलाफ कड़ी कानूनी कार्रवाई की अपील की, ताकि धार्मिक भावनाओं को ठेस न पहुंचे और ऐसी गतिविधियों पर रोक लगाई जा सके।\",\n\"english_summary\": \"Representatives of the Patanjali Sansthan submitted a memorandum to the Sri Ganganagar Collector, demanding action against obscene songs being circulated in the name of Baba Ramdev. They appealed for strict legal action against those promoting public obscenity through such songs to prevent harm to religious sentiments and curb such activities.\",\n\"category\": \"Social Issue\"\n},\n{\n\"article_title\": \"जिला प्रशासन ने यूआईटी में की 4 कार्मिकों की प्रतिनियुक्ति, आमजन को मिलेगी राहत\",\n\"article_title_english\": \"District Administration Deputes 4 Employees to UIT, Bringing Relief to Public\",\n\"hindi_summary\": \"श्रीगंगानगर में यूआईटी (शहरी सुधार न्यास) में स्टाफ की कमी को देखते हुए जिला प्रशासन ने चार कार्मिकों की प्रतिनियुक्ति की है। कलेक्टर डॉ. अमित यादव ने बताया कि अल्पसंख्यक कल्याण विभाग से सहायक प्रशासनिक अधिकारी गौरव कुमार सहित चार अधिकारियों को तत्काल प्रभाव से नई जिम्मेदारी दी गई है। यह कदम आमजन को यूआईटी से जुड़े कार्यों में आ रही परेशानी को कम करने के लिए उठाया गया है, जिसकी मांग दैनिक भास्कर लगातार उठा रहा था।\",\n\"english_summary\": \"Due to a staff shortage in the Urban Improvement Trust (UIT) in Sri Ganganagar, the district administration has deputed four employees. Collector Dr. Amit Yadav stated that four officers, including Assistant Administrative Officer Gaurav Kumar from the Minority Welfare Department, have been given immediate new responsibilities. This move aims to alleviate the difficulties faced by the public in UIT-related work, an issue that Dainik Bhaskar had been consistently highlighting.\",\n\"category\": \"Local Administration\"\n},\n{\n\"article_title\": \"पूर्व विधायक गौड़ ने कलेक्टर को गिनाई शहर की बदहाल नागरिक व्यवस्थाएं, ड्रेनेज व सड़क का उठाए सवाल\",\n\"article_title_english\": \"Former MLA Gaur Informs Collector About Deteriorating Civic Amenities, Raises Drainage and Road Issues\",\n\"hindi_summary\": \"पूर्व विधायक राजकुमार गौड़ ने कलेक्टर अमित यादव से मुलाकात कर श्रीगंगानगर की बदहाल नागरिक व्यवस्थाओं पर चर्चा की। उन्होंने शहर में जलभराव, ड्रेनेज और सीवरेज की खराब स्थिति को उठाया, जिससे आगामी बारिश में गंभीर समस्याओं की आशंका जताई। गौड़ ने बिजली कटौती, ध्वस्त ट्रैफिक व्यवस्था और गजल सम्राट जगजीत सिंह की स्मृति में निर्मित भवन के न खुलने जैसे मुद्दों पर भी ध्यान आकर्षित किया और त्वरित समाधान की मांग की।\",\n\"english_summary\": \"Former MLA Rajkumar Gaur met Collector Amit Yadav to discuss the deteriorating civic amenities in Sri Ganganagar. He highlighted issues of waterlogging, poor drainage, and sewerage systems, expressing concerns about severe problems during the upcoming rainy season. Gaur also drew attention to other issues like power cuts, collapsed traffic management, and the unopened building dedicated to Ghazal Samrat Jagjit Singh, demanding quick solutions.\",\n\"category\": \"Civic Issues\"\n},\n{\n\"article_title\": \"राष्ट्र निर्माण में सीए की भूमिका बहुत व्यापकः डॉ. मोहित टांटिया\",\n\"article_title_english\": \"CA's Role in Nation Building is Extensive: Dr. Mohit Tantia\",\n\"hindi_summary\": \"आईसीएआई की श्रीगंगानगर शाखा में आयोजित एक कार्यक्रम में डॉ. मोहित टांटिया, उपाध्यक्ष, ने कहा कि राष्ट्र निर्माण में चार्टर्ड अकाउंटेंट (सीए) की भूमिका बहुत व्यापक है और उनकी जिम्मेदारियां भी बढ़ी हैं। इस अवसर पर आईसीएआई के सीए सदस्यों के लिए एक स्वास्थ्य जांच शिविर भी आयोजित किया गया, जिसमें ईएसएफएन अस्पताल और आईडीबीआई बैंक ने सहयोग किया।\",\n\"english_summary\": \"In a program organized by the Sri Ganganagar branch of ICAI, Dr. Mohit Tantia, Vice Chairman, stated that the role of Chartered Accountants (CAs) in nation-building is extensive and their responsibilities have increased. On this occasion, a health check-up camp was also organized for ICAI CA members, in collaboration with ESFN Hospital and IDBI Bank.\",\n\"category\": \"Professional Body\"\n},\n{\n\"article_title\": \"आज व कल लगेंगे शहरी सेवा शिविर\",\n\"article_title_english\": \"Urban Service Camps to be Held Today and Tomorrow\",\n\"hindi_summary\": \"श्रीगंगानगर में शहरी क्षेत्र की जनसमस्याओं के त्वरित समाधान के लिए आज और कल (2 व 3 जुलाई) को शहरी सेवा शिविर-2026 आयोजित किए जाएंगे। कलेक्टर डॉ. अमित यादव ने बताया कि ये शिविर श्रीगंगानगर नगरपरिषद के वार्ड 42 से 45 के विभिन्न नगरिय निकायों में लगेंगे, जहां मौके पर ही राहत प्रदान की जाएगी।\",\n\"english_summary\": \"To ensure quick resolution of urban public grievances, 'Shahri Seva Shivir-2026' (Urban Service Camps) will be organized today and tomorrow (July 2nd and 3rd) in Sri Ganganagar. Collector Dr. Amit Yadav informed that these camps will be held in various municipal bodies covering wards 42 to 45, where immediate relief will be provided on the spot.\",\n\"category\": \"Public Service\"\n},\n{\n\"article_title\": \"शिक्षकों ने ग्रीष्मावकाश कटौती के आदेश की होली जलाकर जताया विरोध, सीबीईओ को सौंपा ज्ञापन\",\n\"article_title_english\": \"Teachers Protest Summer Vacation Cut Order, Submit Memorandum to CBEO\",\n\"hindi_summary\": \"संयुक्त शिक्षक संघर्ष समिति से जुड़े शिक्षकों ने ग्रीष्मावकाश कटौती के आदेश का कड़ा विरोध जताते हुए होली जलाई और सीबीईओ को ज्ञापन सौंपा। शिक्षकों ने आदेश को तुरंत वापस लेने की मांग की और चेतावनी दी कि यदि उनकी मांग पूरी नहीं हुई तो आगामी दिनों में और उग्र आंदोलन किया जाएगा। इस दौरान जिला अध्यक्ष जीतेंद्र सिंह कृष्णा सहित कई शिक्षक मौजूद रहे।\",\n\"english_summary\": \"Teachers associated with the Sanyukta Shikshak Sangharsh Samiti strongly protested the order to cut summer vacations by symbolically burning copies of the order and submitting a memorandum to the CBE O. The teachers demanded the immediate withdrawal of the order, warning of more intense protests in the coming days if their demands are not met. District President Jitendra Singh Krishna and many other teachers were present.\",\n\"category\": \"Protest\"\n},\n{\n\"article_title\": \"जिला स्तरीय रोजगार उत्सव 4 जुलाई को अभ्यर्थियों को मिलेंगे नियुक्ति पत्र\",\n\"article_title_english\": \"District Level Employment Fair on July 4th; Appointment Letters to Be Distributed to Candidates\",\n\"hindi_summary\": \"जिला स्तरीय रोजगार उत्सव 4 जुलाई को आयोजित किया जाएगा, जिसमें चयनित अभ्यर्थियों को नियुक्ति पत्र वितरित किए जाएंगे। यह उत्सव कौशल, नियोजन एवं उद्यमिता विभाग द्वारा सरकार के निर्देशानुसार आयोजित किया जा रहा है। मुख्य जिला शिक्षा अधिकारी अरविंद सिंह ने बताया कि इस समारोह में युवाओं को लाभ मिलेगा।\",\n\"english_summary\": \"A district-level employment fair will be held on July 4th, where appointment letters will be distributed to selected candidates. This event is being organized by the Skill, Employment, and Entrepreneurship Department as per government directives. Chief District Education Officer Arvind Singh stated that this ceremony will benefit the youth.\",\n\"category\": \"Employment\"\n},\n{\n\"article_title\": \"गंगनहर का संभावित वरीयताक्रम\",\n\"article_title_english\": \"Probable Priority Order for Gang Canal\",\n\"hindi_summary\": \"श्रीगंगानगर में गंगनहर के जल वितरण के लिए संभावित वरीयताक्रम जारी किया गया है। इसमें पीसीएचएंडजे, आरबी, जेड फार्म सहित विभिन्न शाखाओं के लिए पानी खुलने और बंद होने की तारीखें व समय, तथा पानी की मात्रा (क्यूसेक में) दर्शाई गई है। यह जानकारी किसानों और स्थानीय निवासियों के लिए महत्वपूर्ण है ताकि वे अपनी सिंचाई और जल संबंधी गतिविधियों की योजना बना सकें।\",\n\"english_summary\": \"The probable priority order for water distribution in the Gang Canal in Sri Ganganagar has been released. It details the dates and times for water release and closure, along with the water volume (in cusecs), for various branches including PCH&J, RB, and Z Farm. This information is crucial for farmers and local residents to plan their irrigation and water-related activities.\",\n\"category\": \"Local News\"\n},\n{\n\"article_title\": \"12 जुलाई को श्रीगंगानगर में होगा दैनिक भास्कर का 'प्रतिभा सम्मान समारोह-2026', शुरू हुआ रजिस्ट्रेशन\",\n\"article_title_english\": \"Dainik Bhaskar to Host 'Pratibha Samman Samaroh-2026' in Sri Ganganagar on July 12th; Registration Begins\",\n\"hindi_summary\": \"दैनिक भास्कर द्वारा श्रीगंगानगर में 12 जुलाई को 'प्रतिभा सम्मान समारोह-2026' का भव्य आयोजन किया जाएगा। यह समारोह मेधावी छात्रों और खिलाड़ियों को सम्मानित करने के लिए है, जिन्होंने सीबीएसई और आरबीएसई की 10वीं व 12वीं कक्षा में 75% या उससे अधिक अंक प्राप्त किए हैं। समारोह के लिए रजिस्ट्रेशन प्रक्रिया शुरू हो चुकी है, जिसके लिए 96495 55565 नंबर पर संपर्क किया जा सकता है।\",\n\"english_summary\": \"Dainik Bhaskar will host a grand 'Pratibha Samman Samaroh-2026' (Talent Honoring Ceremony) in Sri Ganganagar on July 12th. This event aims to felicitate meritorious students and sportspersons who scored 75% or more marks in their CBSE and RBSE 10th and 12th board examinations. The registration process for the ceremony has begun, and interested individuals can contact 96495 55565 for more information.\",\n\"category\": \"Event\"\n},\n{\n\"article_title\": \"एसबी मुख्य मार्ग से सत्यम नगर तक सड़क की मांग, विधायक को सौंपा ज्ञापन\",\n\"article_title_english\": \"Demand for Road from SB Main Road to Satyam Nagar; Memorandum Submitted to MLA\",\n\"hindi_summary\": \"शिव नगर जनसेवा समिति के अध्यक्ष गुरुजीत सिंह के नेतृत्व में श्रीगंगानगर के श्याम नगर के निवासियों ने विधायक को एक ज्ञापन सौंपा। उन्होंने एसबी मुख्य मार्ग से सत्यम नगर तक 2 इंच चौड़ी सड़क के निर्माण की मांग की। वर्तमान में सड़क पर गंदा पानी भरा रहता है, जिससे बच्चों और आमजनों को आवागमन में भारी परेशानी हो रही है। निवासियों ने त्वरित समाधान का अनुरोध किया।\",\n\"english_summary\": \"Residents of Shyam Nagar in Sri Ganganagar, led by Shiv Nagar Janseva Samiti President Gurjeet Singh, submitted a memorandum to the MLA. They demanded the construction of a 2-inch wide road from SB main road to Satyam Nagar. Currently, the road is submerged in dirty water, causing significant difficulties for residents, especially children. The residents requested immediate action for a solution.\",\n\"category\": \"Civic Issues\"\n}\n]\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 779,
+            "candidatesTokenCount": 3633,
+            "totalTokenCount": 10870,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 521
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 258
+              }
+            ],
+            "thoughtsTokenCount": 6458,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "u-pFauDXDdzHjuMP14-G0Ak"
+        },
+        "pairedItem": {
+          "item": 1
+        }
+      },
+      {
+        "json": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n\"total_articles\": 10,\n\"overall_summary_hindi\": \"आज के श्रीगंगानगर भास्कर में विभिन्न सामाजिक और धार्मिक आयोजनों को प्रमुखता मिली। रोटरी क्लब ने डॉक्टर्स और युवा सीए को सम्मानित किया, वहीं राजपूत क्षत्रिय संस्था ने युवाओं को आत्मरक्षा और साफा बांधना सिखाया। लेह-लद्दाख में प्रथम सिंधु कुंभ का सफल आयोजन हुआ, जिसमें राजस्थान का शौर्य गूंजा। जैन समाज ने अंतर-संप्रदाय सहमति से चातुर्मास एक ही जगह करने का ऐतिहासिक निर्णय लिया। इसके अतिरिक्त, श्री महाकालेश्वर महादेव मंदिर का निर्माण कार्य शुरू हुआ और खेजड़ी मंदिर धाम को एक जनरेटर भेंट किया गया। खेल जगत में, केंद्रीय विद्यालय के सुमित कुमार ने यू-14 क्षेत्रीय स्पोर्ट्स मीट में कांस्य पदक जीता। अमरनाथ यात्रा का पहला जत्था रवाना हुआ और यादव समाज के अध्यक्ष पद के लिए चुनाव की घोषणा हुई।\",\n\"overall_summary_english\": \"Today's Sriganganagar Bhaskar highlighted various social and religious events. The Rotary Club honored doctors and young CAs, while the Rajput Kshatriya Sanstha trained youth in self-defense and turban tying. The first Sindhu Kumbh was successfully organized in Leh-Ladakh, showcasing Rajasthan's valor. The Jain community made a historic decision to hold Chaturmas at a single venue with inter-sectarian consensus. Additionally, construction began for the Shri Mahakaleshwar Mahadev Temple, and a generator was donated to Khejri Temple Dham. In sports, Sumit Kumar of Kendriya Vidyalaya won a bronze medal at the U-14 Regional Sports Meet. The first batch for the Amarnath Yatra departed, and elections for the Yadav community's presidential post were announced.\",\n\"articles\": [\n{\n\"article_title\": \"डॉक्टर्स और युवा सीए का किया सम्मान\",\n\"article_title_english\": \"Doctors and Young CAs Honored by Rotary Club\",\n\"hindi_summary\": \"श्रीगंगानगर के रोटरी क्लब श्रीद्धि सिद्धि ने डॉक्टर्स-डे और चार्टर्ड अकाउंटेंट्स-डे के अवसर पर चिकित्सा और वित्तीय क्षेत्र में उत्कृष्ट सेवाएं देने वाले 13 डॉक्टरों और 9 युवा चार्टर्ड अकाउंटेंट्स को सम्मानित किया। यह समारोह बुधवार को आयोजित किया गया जिसमें पद्मश्री स्वामी ब्रह्मदेव, सीएमएचओ डॉ. अजय सिंगला सहित कई गणमान्य व्यक्ति उपस्थित रहे। क्लब ने अपने नए सत्र 2026-27 की शुरुआत गो-सेवा और रक्तदान शिविर के साथ की, जिसमें 71 यूनिट रक्त एकत्र किया गया।\",\n\"english_summary\": \"The Rotary Club of Shridhi Sidhi in Sriganganagar honored 13 doctors and 9 young chartered accountants for their excellent services in the medical and financial sectors on Doctors' Day and Chartered Accountants' Day. The ceremony, held on Wednesday, was attended by dignitaries including Padma Shri Swami Brahmadev and CMHO Dr. Ajay Singla. The club also launched its new session (2026-27) with acts of cow service and a blood donation camp, collecting 71 units of blood.\"\n},\n{\n\"article_title\": \"प्रथम सिंधु कुंभ; लेह की वादियों में गूंजा राजस्थान का शौर्य, सिंधु घाट पर हल्दीघाटी की माटी से हुआ तिलक\",\n\"article_title_english\": \"First Sindhu Kumbh: Rajasthan's Valor Echoes in Leh, Tilak Applied with Haldi Ghati Soil at Sindhu Ghat\",\n\"hindi_summary\": \"हिमालय परिवार द्वारा आयोजित 30वीं सिंधु दर्शन यात्रा 'प्रथम सिंधु कुंभ' लेह-लद्दाख में संपन्न हुई, जिसमें राजस्थान से 326 यात्रियों सहित देश-विदेश से हजारों श्रद्धालु शामिल हुए। इस ऐतिहासिक अवसर पर पहली बार सिंधु घाट पर भव्य सिंधु महाआरती की गई और हल्दीघाटी की पवित्र माटी से तिलक लगाया गया। यात्रियों ने सिंधु मैया के नीले जल से कलश भरे और विभिन्न राज्यों के सांस्कृतिक प्रदर्शनों ने सबका मन मोह लिया। श्रीगंगानगर से लौटे दल के सदस्यों ने अपने अनुभव साझा किए, जिन्होंने यात्रा के दौरान राजस्थान के राज्यपाल गुलाब चंद कटारिया से भी मुलाकात की।\",\n\"english_summary\": \"The 'Pratham Sindhu Kumbh,' the 30th Sindhu Darshan Yatra organized by the Himalayan family in Leh-Ladakh, concluded with thousands of devotees, including 326 from Rajasthan, participating. For the first time, a grand Sindhu Mahaarti was performed at Sindhu Ghat, and participants applied tilak with sacred soil from Haldi Ghati. Devotees filled pitchers with the blue waters of the Sindhu River, and cultural performances from various states captivated the audience. Members of the Sriganganagar delegation, who returned from the difficult journey, shared their experiences, including meeting Rajasthan Governor Gulab Chand Kataria.\"\n},\n{\n\"article_title\": \"अमरनाथ दर्शन के लिए आज रवाना होगा जत्था\",\n\"article_title_english\": \"First Batch for Amarnath Yatra Departs Today\",\n\"hindi_summary\": \"अमरनाथ बर्फानी सेवा संस्थान का पहला जत्था 2 जुलाई को अमरनाथ यात्रा के लिए रवाना होगा। यह जत्था सुबह 4 बजे प्राचीन शिवालय शुक्रवारनाथ की बगीची में पूजा-अर्चना के बाद बठिंडा से जम्मू तवी ट्रेन पकड़ेगा। 7 सदस्यों के इस जत्थे में भूपेन्द्र कसूरिया और राजेन्द्र प्रसाद मंगवाल शामिल हैं, जो बालटाल मार्ग से यात्रा करेंगे। संस्थान का दूसरा जत्था 12 जुलाई को रवाना होगा।\",\n\"english_summary\": \"The first batch of the Amarnath Yatra, organized by the Amarnath Barfani Seva Sansthan, will depart on July 2nd. The seven-member group, including Bhupendra Kasuria and Rajendra Prasad Mangwal, will begin their journey after prayers at the ancient Shiv Temple Sukravaranath Garden at 4 AM, proceeding via Bathinda to Jammu Tawi and then to Baltal. The second batch for the pilgrimage is scheduled to depart on July 12th.\"\n},\n{\n\"article_title\": \"लांयस क्लब विकास का नया सत्र हुआ शुरू\",\n\"article_title_english\": \"Lions Club Vikas Initiates New Service Year\",\n\"hindi_summary\": \"लांयस क्लब श्रीगंगानगर 'विकास' ने अपने नए सेवा वर्ष (2026-27) की शुरुआत सुखसुविधा सैली श्री गोशाला में गो-सेवा के साथ की। इसके बाद श्री जगदंबा अंध महाविद्यालय में आयोजित समारोह में परमार्थ स्वामी ब्रह्मदेव महाराज के सानिध्य में समाज के प्रमुख चिकित्सकों और चार्टर्ड अकाउंटेंट्स को उनके उत्कृष्ट योगदान के लिए अभिनंदन-पत्र भेंट कर सम्मानित किया गया।\",\n\"english_summary\": \"Lions Club Sriganganagar 'Vikas' commenced its new service year (2026-27) with cow service at Sukhsuvidha Saheli Shri Gaushala. Following this, a ceremony was held at Shri Jagdamba Blind College, where prominent doctors and chartered accountants were honored for their excellent contributions to society in the presence of Parmarth Swami Brahmadev Maharaj.\"\n},\n{\n\"article_title\": \"यादव समाज के अध्यक्ष पद का चुनाव 12 को\",\n\"article_title_english\": \"Yadav Community to Hold Presidential Elections on July 12th\",\n\"hindi_summary\": \"हनुमानगढ़ रोड़ स्थित यादव (अहीर) समाज संस्था के अध्यक्ष पद का चुनाव 12 जुलाई को आमसभा की बैठक में होगा। चुनाव प्रक्रिया 10 जुलाई को दोपहर 2 बजे से 5 बजे तक चलेगी, जिसकी घोषणा संस्था अध्यक्ष अमरचंद यादव ने की। वर्ष 1978 से कार्यरत यह समाज संस्था कुरीतियों को दूर करने और शिक्षा के प्रसार में सक्रिय है।\",\n\"english_summary\": \"The Yadav (Ahir) community organization located on Hanumangarh Road will hold elections for the post of president on July 12th during a general body meeting. The election process is scheduled from 2 PM to 5 PM on July 10th, as announced by the organization's president, Amarchand Yadav. Established in 1978, the organization actively works towards eradicating social evils and promoting education.\"\n},\n{\n\"article_title\": \"राजपूत क्षत्रिय संस्था की पहलः युवाओं ने आत्मरक्षा व साफा बांधने के गुर सीखे\",\n\"article_title_english\": \"Rajput Kshatriya Sanstha Teaches Youth Self-Defense and Turban Tying Skills\",\n\"hindi_summary\": \"सूरतगढ़ में राजपूत क्षत्रिय संस्था ने युवाओं को आत्मरक्षा और साफा बांधने के गुर सिखाने के लिए एक कार्यक्रम आयोजित किया। इसमें राजपूत समाज के बच्चों और युवाओं ने उत्साहपूर्वक भाग लिया, जिसमें साफा बांधने की प्रतियोगिता भी रखी गई। प्रशिक्षक देवेंन्द्रसिंह शेखावत ने साफा बांधने की कला सिखाई, जिसे भारतीय संस्कृति में वीरता और सम्मान का प्रतीक माना जाता है। संस्था अध्यक्ष मयंक सिंह राठौड़ ने ऐसे कार्यक्रमों को युवाओं को अपनी संस्कृति से जोड़ने के लिए महत्वपूर्ण बताया।\",\n\"english_summary\": \"The Rajput Kshatriya Sanstha in Suratgarh organized a program to teach self-defense and turban-tying skills to young people. Children and youth from the Rajput community actively participated, and a turban-tying competition was also held. Instructor Devendra Singh Shekhawat taught the art of tying the turban, which is considered a symbol of bravery and honor in Indian culture. The organization's president, Mayank Singh Rathore, emphasized the importance of such programs in connecting youth with their culture.\"\n},\n{\n\"article_title\": \"खेजड़ी मंदिर धाम में 5.25 लाख रु. का जनरेटर भेंट\",\n\"article_title_english\": \"Generator Worth Rs 5.25 Lakh Donated to Khejri Temple Dham\",\n\"hindi_summary\": \"सूरतगढ़ के श्री हनुमान खेजड़ी मंदिर परिसर में एक धार्मिक समारोह में 5.25 लाख रुपये की लागत से एक नए जनरेटर का शुभारंभ किया गया। युवराज बापला और कालूराम जाट ने बटन दबाकर इसे लोकार्पित किया। यह जनरेटर समाजसेवी मनोज बाटला द्वारा मंदिर समिति को भेंट किया गया है, जिससे मंदिर में बिजली कटौती के दौरान श्रद्धालुओं और प्रबंधन को होने वाली परेशानी दूर होगी।\",\n\"english_summary\": \"A new generator, costing Rs 5.25 lakh, was inaugurated at the Shri Hanuman Khejri Temple complex in Suratgarh during a religious ceremony. Yuvaraj Bapla and Kaluram Jaat officially launched the generator by pressing a button. This generator was donated by social worker Manoj Batla to the temple committee and is expected to alleviate difficulties faced by devotees and management during power outages, especially during Aarti on Tuesdays and Saturdays.\"\n},\n{\n\"article_title\": \"श्री महाकालेश्वर महादेव मंदिर निर्माण शुरू सुंदरकांड व हनुमान चालीसा का पाठ किया\",\n\"article_title_english\": \"Construction Begins for Shri Mahakaleshwar Mahadev Temple; Sundarkand and Hanuman Chalisa Recited\",\n\"hindi_summary\": \"श्रीगंगानगर की बसंत विहार कॉलोनी में श्री महाकालेश्वर महादेव मंदिर का निर्माण कार्य संत स्वामी कमलाानंद गिरी महाराज के सानिध्य में भूमि पूजन के साथ शुरू हो गया है। निर्माण कार्य शंकुंतला देवी गुप्ता की स्मृति में उनके परिवार द्वारा करवाया जा रहा है। कार्यक्रम में हवन पूजन, सुंदरकांड और हनुमान चालीसा का पाठ किया गया, जिसमें अनेक गणमान्य व्यक्ति और भजन मंडली के सदस्य शामिल हुए।\",\n\"english_summary\": \"Construction work for the Shri Mahakaleshwar Mahadev Temple has commenced in Basant Vihar Colony, Sriganganagar, with a ground-breaking ceremony led by Saint Swami Kamalanand Giri Maharaj. The temple is being built by the Shankuntala Devi Gupta family in her memory. The event included हवन पूजन (fire ritual), recitation of Sundarkand and Hanuman Chalisa, and was attended by many dignitaries and members of the Bhajan Mandali.\"\n},\n{\n\"article_title\": \"जैन समाज की पहल • साध्वी डॉ. शिवप्रज्ञा महाराज, खुशी महाराज व साध्वी सियल महाराज 6 जुलाई को यहां पहुंचेंगी (विभिन्न संप्रदायों की सहमति से एक ही जगह होगा चातुर्मास)\",\n\"article_title_english\": \"Jain Community Initiative: Sadhvi Dr. Shivpragya Maharaj, Khushi Maharaj, and Sial Maharaj to Arrive July 6th; Chaturmas to be Held at a Single Venue with Inter-Sectarian Consensus\",\n\"hindi_summary\": \"श्रीगंगानगर के जैन समाज ने इस बार विभिन्न संप्रदायों की सहमति से चातुर्मास का आयोजन एक ही साझा मंच पर करने का ऐतिहासिक निर्णय लिया है। पहले अलग-अलग स्थानों पर होने वाले चातुर्मास को अब एकजुटता के उद्देश्य से एक ही जगह मनाया जाएगा। महासाध्वी डॉ. शिवप्रज्ञा महाराज, खुशीश्री महाराज और सियलश्री महाराज 6 जुलाई को मंगल नगर पहुंचेंगी, जिसके बाद 23 जुलाई से 23 नवंबर तक यह चार महीने का चातुर्मास चलेगा। इस पहल से पूरे जैन समाज में अभूतपूर्व उत्साह है और यह समाज में आपसी सदभाव व एकता की मिसाल है।\",\n\"english_summary\": \"The Jain community of Sriganganagar has made a historic decision to host the upcoming Chaturmas at a single, shared venue with the consensus of various sects, promoting unity. Previously, Chaturmas ceremonies were held at separate locations. Mahasadhvi Dr. Shivpragya Maharaj, Khushishree Maharaj, and Sialshree Maharaj are scheduled to arrive in Mangal Nagar on July 6th, marking the start of the four-month Chaturmas period from July 23rd to November 23rd. This initiative has generated immense enthusiasm within the Jain community and serves as an example of mutual harmony and unity.\"\n},\n{\n\"article_title\": \"यूं -14 रिजनल स्पोर्टस मीट में सेंट्रल स्कूल के सुमित कुमार ने जीता कांस्य\",\n\"article_title_english\": \"Sumit Kumar of Central School Wins Bronze at U-14 Regional Sports Meet\",\n\"hindi_summary\": \"श्रीगंगानगर के नव स्थापित केंद्रीय विद्यालय सीसुब के विद्यार्थी सुमित कुमार ने केंद्रीय विद्यालय संगठन, जयपुर संभाग की यू-14 रिजनल स्पोर्ट्स मीट 2026 में जूडो प्रतियोगिता में कांस्य पदक जीता। प्रतियोगिता में रीजन के 86 विद्यालय शामिल हुए, जिसमें सीसुब से चार विद्यार्थियों ने विभिन्न स्पधार्ओं में भाग लिया। पदक विजेता सुमित को सम्मानित भी किया गया।\",\n\"english_summary\": \"Sumit Kumar, a student from the newly established Central School SSUb in Sriganganagar, won a bronze medal in the Judo competition at the U-14 Regional Sports Meet 2026, organized by the Kendriya Vidyalaya Sangathan, Jaipur division. The competition saw participation from 86 schools in the region, with four students from SSUb competing in various events. Sumit was also honored for his achievement.\"\n}\n]\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 779,
+            "candidatesTokenCount": 3202,
+            "totalTokenCount": 12052,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 521
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 258
+              }
+            ],
+            "thoughtsTokenCount": 8071,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "8epFaovQOonAjuMPlKbK8Qc"
+        },
+        "pairedItem": {
+          "item": 2
+        }
+      },
+      {
+        "json": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n\"total_articles\": 14,\n\"overall_summary_hindi\": \"श्रीगंगानगर भास्कर के इस अंक में अरावली एक्सप्रेस के दो एसी कोच में आग लगने की घटना प्रमुखता से कवर की गई है, जिसकी जांच बीकानेर रेलवे मंडल कर रहा है। इसके साथ ही, अयोध्या राम मंदिर में चोरी से लिंक होने का झूठा खौफ दिखाकर हो रहे डिजिटल अरेस्ट स्कैम के प्रति लोगों को आगाह किया गया है। पुलिस ने 2 किलो अफीम और हेरोइन के साथ दो तस्करों को गिरफ्तार किया है। अन्य खबरों में, रामदेव कॉलोनी में ट्रांसफार्मर के जलते तारों और आईजीएनपी के जर्जर पुल पर ट्रैक्टर-ट्रॉली पलटने से हुए जाम की समस्याएँ शामिल हैं। रेलवे स्टेशन पर दिव्यांगों और बुजुर्गों के लिए लिफ्ट की कमी, पानी की पाइपलाइन न जुड़ने पर प्रदर्शन और आवारा श्वानो की नसबंदी के लिए मिले फंड पर भी रिपोर्ट है।\",\n\"overall_summary_english\": \"This issue of Sriganganagar Bhaskar prominently covers a fire that broke out in two AC coaches of the Aravali Express, currently under investigation by the Bikaner Railway Division. Additionally, the public has been warned about a 'digital arrest' scam falsely linking individuals to the Ayodhya Ram Mandir theft. Police have also arrested two drug traffickers with 2 kg of opium and heroin. Other major news includes issues with burning transformer wires in Ramdev Colony, a tractor-trolley overturning on a dilapidated IGNP bridge causing a highway jam, and protests over unconnected water pipelines. Reports also highlight the lack of lift facilities for disabled and elderly passengers at the railway station and funds received for stray dog sterilization.\",\n\"articles\": [\n{\n\"article_title\": \"श्रीगंगानगर आ रही ट्रेन मंगलवार रात 1:30 बजे ऐलनाबाद से रवाना हुई तब 10 मिनट बाद कोच में आग लग, तुरंत ट्रेन रोक स्टाफ ने बुझाई, जांच में जुटे बीकानेर रेलवे मंडल के अधिकारी\",\n\"article_title_english\": \"Fire Breaks Out in Two AC Coaches of Aravali Express En Route to Sriganganagar; Staff Extinguishes Blaze, Bikaner Railway Division Investigates\",\n\"hindi_summary\": \"श्रीगंगानगर आ रही अरावली एक्सप्रेस के दो एसी कोच में ऐलनाबाद से रवाना होने के 10 मिनट बाद आग लग गई। ट्रेन को तुरंत रोककर स्टाफ ने आग बुझाई, जिससे बड़ा हादसा टल गया। बीकानेर रेलवे मंडल के अधिकारी मामले की जांच कर रहे हैं। गौरतलब है कि 28 जून को भी इसी ट्रेन में धुआं उठने की घटना हुई थी, जिसपर यात्री घबरा गए थे।\",\n\"english_summary\": \"A fire erupted in two AC coaches of the Aravali Express, 10 minutes after it departed from Ellenabad en route to Sriganganagar on Tuesday night. Train staff promptly stopped the train and extinguished the fire, averting a major accident. Officials from the Bikaner Railway Division are investigating the incident, which follows a similar smoke incident on the same train on June 28, causing panic among passengers.\"\n},\n{\n\"article_title\": \"अयोध्या राम मंदिर में हुई चोरी से आपका लिंक है? ऐसा झूठा और मनगढ़ंत खौफ दिखा कर रहे डिजिटल अरेस्ट\",\n\"article_title_english\": \"\\\"Linked to Ayodhya Ram Mandir Theft?\\\" Digital Arrest Scam Uses Fake Threats, Expert Warns\",\n\"hindi_summary\": \"साइबर ठग अयोध्या राम मंदिर में चोरी या अन्य संवेदनशील मुद्दों से लिंक होने का झूठा खौफ दिखाकर डिजिटल अरेस्ट कर रहे हैं। वे डीपफेक वीडियो कॉल का उपयोग कर पीड़ितों से पैसे ऐंठते हैं। विशेषज्ञों ने अनजान वीडियो कॉल से सावधान रहने और पुलिस द्वारा पैसे की मांग न किए जाने की सलाह दी है, विशेषकर सेवानिवृत्त कर्मचारियों और बुजुर्गों को लक्ष्य बनाया जा रहा है।\",\n\"english_summary\": \"Cyber fraudsters are employing a 'digital arrest' scam by falsely linking victims to the Ayodhya Ram Mandir theft or other sensitive issues, using deepfake video calls to extort money. Experts warn against answering unknown video calls and emphasize that police never demand money. This scam particularly targets retirees and the elderly.\"\n},\n{\n\"article_title\": \"2 किलो अफीम और हेरोइन के साथ दो तस्कर गिरफ्तार\",\n\"article_title_english\": \"Two Drug Traffickers Arrested with 2 Kg Opium and 17.23 Grams Heroin\",\n\"hindi_summary\": \"श्रीगंगानगर पुलिस ने नशा विरोधी अभियान के तहत दो तस्करों को गिरफ्तार किया है। इनके पास से 2 किलोग्राम अवैध अफीम और 17.23 ग्राम अवैध हेरोइन बरामद की गई है। एक आरोपी को सूरतगढ़ और दूसरे को श्रीगंगानगर से पकड़ा गया। पुलिस मामले की आगे की जांच कर रही है।\",\n\"english_summary\": \"Sriganganagar police have arrested two drug traffickers as part of an anti-drug campaign. The arrests led to the seizure of 2 kilograms of illegal opium and 17.23 grams of illegal heroin. One suspect was apprehended in Suratgarh, and the other in Sriganganagar. Police are conducting further investigations into the case.\"\n},\n{\n\"article_title\": \"रामदेव कॉलोनी में ट्रांसफार्मर से टूट रहे जलते तार, हादसे का डर\",\n\"article_title_english\": \"Burning Wires and Frequent Breakdowns from Transformer in Ramdev Colony, Fear of Accidents\",\n\"hindi_summary\": \"रामदेव कॉलोनी के निवासी ट्रांसफार्मर के बार-बार जलने और तारों के टूटने से चिंतित हैं, जिससे गंभीर हादसों का डर बना हुआ है। निवासियों ने बिजली विभाग को ज्ञापन सौंपकर पुराने ट्रांसफार्मर को बदलने की मांग की है।\",\n\"english_summary\": \"Residents of Ramdev Colony are deeply concerned about recurring transformer breakdowns and burning wires, which pose a significant risk of accidents. They have submitted a memorandum to the electricity department, urging them to replace the old transformer.\"\n},\n{\n\"article_title\": \"IGNP के जर्जर पुल पर तूड़ी की ट्रैक्टर-ट्रॉली पलटी... डेढ़ घंटे नेशनल हाईवे-62 जाम रहा\",\n\"article_title_english\": \"Tractor-Trolley Overturns on Dilapidated IGNP Bridge, Blocking National Highway-62 for 1.5 Hours\",\n\"hindi_summary\": \"सूरतगढ़-बीकानेर नेशनल हाईवे-62 पर इंदिरा गांधी नहर परियोजना (IGNP) के एक जर्जर पुल पर तूड़ी से लदी ट्रैक्टर-ट्रॉली पलट गई। इस घटना के कारण करीब डेढ़ घंटे तक नेशनल हाईवे जाम रहा। पुल की खराब हालत को दुर्घटना का मुख्य कारण बताया जा रहा है।\",\n\"english_summary\": \"A tractor-trolley laden with fodder overturned on a dilapidated bridge over the Indira Gandhi Nahar Pariyojana (IGNP) on National Highway-62 near Suratgarh-Bikaner. The accident caused a traffic jam on the highway for approximately 1.5 hours. The poor condition of the bridge is cited as the primary cause of the mishap.\"\n},\n{\n\"article_title\": \"पेयजल संकट: लोगों ने दो घंटे धरना प्रदर्शन किया\",\n\"article_title_english\": \"Drinking Water Crisis: Villagers Stage Two-Hour Protest\",\n\"hindi_summary\": \"रामसरा जाकड़ान ब्लॉक की रामदेव कॉलोनी में पेयजल समस्या का समाधान न होने से गुस्साए ग्रामीणों ने वाटरवर्क्स परिसर में दो घंटे का धरना प्रदर्शन किया। अधिकारियों के आश्वासन के बाद ग्रामीणों ने अपना प्रदर्शन समाप्त कर दिया।\",\n\"english_summary\": \"Residents of Ramdev Colony in Ramsara Jakran block staged a two-hour protest at the Water Works Department office due to the unresolved drinking water crisis. The villagers ended their demonstration after receiving assurances from officials that the issue would be resolved within 15 days.\"\n},\n{\n\"article_title\": \"4 दिन बाद रावला क्षेत्र की नहरों में पूरा नहीं हुआ पानी\",\n\"article_title_english\": \"Rawla Region Canals Still Await Full Water Supply After Four Days\",\n\"hindi_summary\": \"रावला हेड से अनूपगढ़ शाखा में पानी छोड़े जाने के चार दिन बाद भी रावला क्षेत्र की नहरों में पूरी तरह से पानी नहीं पहुंचा है। इससे 281 और 321 हेक्टेयर कृषि भूमि, विशेषकर कपास की फसलें प्रभावित हो रही हैं।\",\n\"english_summary\": \"Four days after water was released into the Anupgarh branch from Rawla Head, the canals in the Rawla region have not yet received a full supply. This shortage is adversely affecting 281 and 321 hectares of agricultural land, particularly cotton crops.\"\n},\n{\n\"article_title\": \"नरहर से नहर में डूबे युवक का शव दूसरे दिन मिला\",\n\"article_title_english\": \"Body of Drowned Youth Found in Canal Near Narihar on Second Day\",\n\"hindi_summary\": \"नरहर के पास जीजी नहर में डूबे एक युवक का शव बुधवार को दूसरे दिन बरामद कर लिया गया। युवक की पहचान भद्रा निवासी श्याम नायक के रूप में हुई, जो ईंट उद्योग में काम करता था। पुलिस ने शव का पोस्टमार्टम कराकर परिजनों को सौंप दिया है।\",\n\"english_summary\": \"The body of a youth who drowned in the GG Canal near Narihar was recovered on Wednesday, the second day after the incident. The deceased was identified as Shyam Nayak, a resident of Bhadra who worked in a brick kiln. Police conducted a post-mortem and handed the body over to his family.\"\n},\n{\n\"article_title\": \"पिकअप और बाइक की टक्कर, पिता-पुत्र घायल\",\n\"article_title_english\": \"Father and Son Injured in Pickup-Bike Collision\",\n\"hindi_summary\": \"सूरतगढ़ रोड पर आंबेडकर चौक के पास बुधवार सुबह एक पिकअप और बाइक की टक्कर में पिता-पुत्र घायल हो गए। पिकअप चालक मौके से फरार हो गया, जिसे बाद में पुलिस ने कब्जे में ले लिया है।\",\n\"english_summary\": \"A father and son were injured in a collision between a pickup truck and a motorcycle near Ambedkar Chowk on Suratgarh Road on Wednesday morning. The pickup driver fled the scene, but the vehicle was later impounded by the police.\"\n},\n{\n\"article_title\": \"कांग्रेस का एसडीएम कार्यालय पर प्रदर्शन\",\n\"article_title_english\": \"Congress Protests at SDM Office\",\n\"hindi_summary\": \"कांग्रेस कार्यकर्ताओं ने विभिन्न जनसमस्याओं के समाधान की मांग को लेकर बुधवार को एसडीएम कार्यालय पर प्रदर्शन किया। उन्होंने प्रशासन से सात दिनों के भीतर समस्याओं का समाधान करने की मांग की।\",\n\"english_summary\": \"Congress workers staged a protest at the SDM office on Wednesday, demanding solutions to various public issues. They urged the administration to resolve these problems within seven days.\"\n},\n{\n\"article_title\": \"हेरोइन सप्लायर रंगा सिंह का अवैध निर्माण ध्वस्त\",\n\"article_title_english\": \"Illegal Construction of Heroin Supplier Ranga Singh Demolished\",\n\"hindi_summary\": \"श्रीगंगानगर में हेरोइन सप्लायर रंगा सिंह द्वारा सरकारी भूमि पर किए गए अवैध निर्माण को प्रशासन और पुलिस की मौजूदगी में ध्वस्त कर दिया गया है। यह कार्रवाई अतिक्रमण विरोधी अभियान के तहत की गई।\",\n\"english_summary\": \"In Sriganganagar, the illegal construction built by heroin supplier Ranga Singh on government land was demolished by the administration in the presence of police. This action was taken as part of an anti-encroachment drive.\"\n},\n{\n\"article_title\": \"पाइपलाइन नहीं जोड़ने से लोगों ने धरना लगाया\",\n\"article_title_english\": \"Villagers Protest Over Unconnected Drinking Water Pipeline\",\n\"hindi_summary\": \"रावला मंडी के 4 पीएसडी के निवासियों ने 5 पीएसडी से अपनी पेयजल पाइपलाइन नहीं जोड़ने के कारण विरोध प्रदर्शन किया। वाटरवर्क्स विभाग से कनेक्शन का आश्वासन मिलने के बाद ग्रामीणों ने धरना समाप्त कर दिया।\",\n\"english_summary\": \"Residents of Rawla Mandi 4 PSD staged a protest due to the non-connection of their drinking water pipeline to 5 PSD. They ended their demonstration after receiving assurances from the Water Works Department regarding the connection.\"\n},\n{\n\"article_title\": \"रेलवे स्टेशन के प्लेटफार्म नंबर दो व तीन पर फुट ओवरब्रिज पर चढ़ने से दिव्यांग व बुजुर्ग यात्री परेशान, लिफ्ट ही समाधान\",\n\"article_title_english\": \"Disabled and Elderly Passengers Face Hardship Using Foot Overbridge at Sriganganagar Railway Station Platforms 2 & 3; Lift is the Solution\",\n\"hindi_summary\": \"श्रीगंगानगर रेलवे स्टेशन पर दिव्यांग और बुजुर्ग यात्रियों को प्लेटफार्म नंबर दो और तीन पर जाने के लिए फुट ओवरब्रिज का उपयोग करने में भारी परेशानी होती है क्योंकि यहां लिफ्ट की सुविधा नहीं है। वर्तमान में लिफ्ट केवल प्लेटफार्म नंबर चार पर उपलब्ध है। नए फुट ओवरब्रिज के साथ प्लेटफार्म दो व तीन के लिए लिफ्ट लगाने का प्रस्ताव है।\",\n\"english_summary\": \"Disabled and elderly passengers at Sriganganagar Railway Station face significant difficulties accessing platforms two and three via the foot overbridge due to the absence of a lift facility. Lifts are currently only available for platform four. Proposals are in place to construct new foot overbridges and install lifts for platforms two and three to address this issue.\"\n},\n{\n\"article_title\": \"श्वानो की नसबंदी के लिए UIT से 50 लाख रु. मिले\",\n\"article_title_english\": \"UIT Receives Rs 50 Lakh for Stray Dog Sterilization in Sriganganagar\",\n\"hindi_summary\": \"श्रीगंगानगर यूआईटी को आवारा श्वानो की नसबंदी के लिए 50 लाख रुपये का बजट मिला है। इससे 2500 श्वानो की नसबंदी की जा सकेगी। इसके तहत एक श्वान शेल्टर भी बनाया जाएगा। पेडीवाल ने बताया कि अब तक 1100 श्वानो की नसबंदी हो चुकी है।\",\n\"english_summary\": \"The Urban Improvement Trust (UIT) in Sriganganagar has received a budget of Rs 50 lakh for the sterilization of stray dogs, targeting 2,500 dogs. A dog shelter will also be constructed. According to Pedival, 1100 dogs have already been sterilized.\"\n}\n]\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 779,
+            "candidatesTokenCount": 3060,
+            "totalTokenCount": 8955,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 521
+              },
+              {
+                "modality": "IMAGE",
+                "tokenCount": 258
+              }
+            ],
+            "thoughtsTokenCount": 5116,
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "MutFapboHInAjuMPlKbK8Qc"
+        },
+        "pairedItem": {
+          "item": 3
+        }
+      }
+    ]
+  },
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Prepare Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze an image": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Image Analysis Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "ComfyUI1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Images": {
+      "main": [
+        [
+          {
+            "node": "Analyze an image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ComfyUI1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Video Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Facebook Graph API2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Graph API2": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Graph API3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload an asset from file data": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify - Article Pipeline Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Facebook Graph API3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify - Article Pipeline Error": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Video Binary": {
+      "main": [
+        [
+          {
+            "node": "Write Video To Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Video To Disk": {
+      "main": [
+        [
+          {
+            "node": "Build FFmpeg Overlay Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build FFmpeg Overlay Command": {
+      "main": [
+        [
+          {
+            "node": "Run FFmpeg Overlay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run FFmpeg Overlay": {
+      "main": [
+        [
+          {
+            "node": "Read Final Reel Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Final Reel Video": {
+      "main": [
+        [
+          {
+            "node": "Upload an asset from file data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "82891d45-4463-4af1-8fd8-72cd8d1f98df",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "be9b3cae6755855fb385192e0d9c1929f14b9ad43d71998f971d6a1229710d0b"
+  },
+  "id": "XEqKnJgeKJReRqYyfKknh",
+  "tags": []
+}
