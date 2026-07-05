@@ -100,7 +100,7 @@
     {
       "parameters": {
         "operation": "sendAndWait",
-        "chatId": "5845124726",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "message": "=📰 {{ $json.results?.[0]?.title || 'Untitled' }}\n\n🎬 Hindi Script:\n{{ $json.results?.[0]?.reframed_script_hindi || '' }}\n\n🌐 English Script:\n{{ $json.results?.[0]?.reframed_script_english || '' }}\n\n📊 Deviation: {{ $json.results?.[0]?.deviation_percent ?? 0 }}%\n➕ Facts added: {{ ($json.results?.[0]?.facts_added || []).length ? $json.results[0].facts_added.join(', ') : 'None' }}\n➖ Facts removed: {{ ($json.results?.[0]?.facts_removed || []).length ? $json.results[0].facts_removed.join(', ') : 'None' }}",
         "approvalOptions": {
           "values": {
@@ -336,7 +336,7 @@
     {
       "parameters": {
         "operation": "sendAndWait",
-        "chatId": "5845124726",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "message": "=Hii, your video is ready and uploaded to cloud please verify it and response quickly\nhere is link for the video :\n {{ $json.url }}",
         "approvalOptions": {
           "values": {
@@ -402,7 +402,7 @@
       "parameters": {
         "httpRequestMethod": "POST",
         "graphApiVersion": "v23.0",
-        "node": "17841416376058313",
+        "node": "={{ $env.IG_BUSINESS_ACCOUNT_ID }}",
         "edge": "media",
         "options": {
           "queryParameters": {
@@ -446,7 +446,7 @@
       "parameters": {
         "httpRequestMethod": "POST",
         "graphApiVersion": "v23.0",
-        "node": "17841416376058313",
+        "node": "={{ $env.IG_BUSINESS_ACCOUNT_ID }}",
         "edge": "media_publish",
         "options": {
           "queryParameters": {
@@ -535,7 +535,7 @@
     },
     {
       "parameters": {
-        "chatId": "5845124726",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "=⚠️ Image analysis failed for one page (image_number: {{ $json.image_number ?? 'unknown' }}).\nError: {{ $json.error?.message || JSON.stringify($json).slice(0,300) }}\n\nThis page was skipped. The other pages continue processing normally — no action needed unless every page fails.",
         "additionalFields": {}
       },
@@ -557,7 +557,7 @@
     },
     {
       "parameters": {
-        "chatId": "5845124726",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "=🛑 Error while processing article: \"{{ $json.title || $json.results?.[0]?.title || 'unknown title' }}\"\nFailed node output: {{ $json.error?.message || JSON.stringify($json).slice(0,300) }}\n\nThis article was skipped and the pipeline is continuing with the next one. Check the n8n execution log to reprocess it manually if needed.",
         "additionalFields": {}
       },

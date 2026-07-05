@@ -93,18 +93,37 @@ instance, which won't exist in yours):
 | Cloudinary API         | `Upload an asset from file data`                                  | Hosting the final video and getting a public URL |
 | Facebook Graph API     | `Facebook Graph API2`, `Facebook Graph API3`                     | Creating the media container & publishing to Instagram (requires a Facebook Page linked to an Instagram Business/Creator account, and an app with `instagram_content_publish` / relevant Graph API permissions) |
 
-### 5. Other things you'll need to update after importing
-Because this JSON was exported from a personal instance, a few values are hard-coded and
-should be changed to match your own setup:
-- **Telegram `chatId`** — currently set to a specific chat ID; change it in all Telegram
-  nodes to your own chat/group ID.
+### 5. Environment variables (`.env`)
+Secrets (Gemini API key, Telegram bot token, Cloudinary key/secret, Facebook Graph API
+token, ComfyUI auth) live in **n8n's own encrypted Credentials store** — they are never
+written into the workflow JSON, so there's nothing to move for those.
+
+The two non-secret but instance-specific IDs that *were* hard-coded in the JSON have been
+parameterized to read from environment variables instead:
+
+- `TELEGRAM_CHAT_ID` — used by all Telegram nodes (approval prompts + error alerts)
+- `IG_BUSINESS_ACCOUNT_ID` — used by the Facebook Graph API nodes (`node` parameter)
+
+Copy `.env.example` to `.env`, fill in your values, and load it into your n8n
+container/process (e.g. via `docker-compose --env-file .env` or your compose file's
+`env_file:` directive). You also need to set:
+
+```
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+```
+
+n8n blocks node expressions from reading `$env` by default as a security measure (so that
+anyone with workflow-edit access can't read your host's environment variables). Only set
+this to `false` on an instance where you trust everyone who can edit workflows — for a
+personal/self-hosted setup like this, that's usually fine.
+
+### 6. Other things you'll need to update after importing
 - **Credential IDs/names** — n8n will show these as broken until you re-select your own
   credentials in each node listed above.
 - **ComfyUI prompt/workflow JSON** inside the `ComfyUI1` node — confirm it matches your
   ComfyUI workflow (model name, node IDs) if you're not using an identical ComfyUI setup.
 - **Local file paths** (`/media/reel-processing/...`, font path) — adjust to match your
   container/host filesystem.
-- **Instagram/Facebook Page ID** used inside the Graph API nodes' parameters.
 
 ---
 
@@ -117,8 +136,10 @@ should be changed to match your own setup:
 4. Make sure FFmpeg is installed and the font path + `/media/reel-processing/` directory
    exist and are writable in your n8n environment.
 5. Confirm ComfyUI is running, reachable from n8n, and has the LTX-Video model loaded.
-6. Update the Telegram `chatId` values to your own.
-7. Update the Facebook Graph API nodes with your Page/Instagram account details.
+6. Copy `.env.example` to `.env`, fill in `TELEGRAM_CHAT_ID` and `IG_BUSINESS_ACCOUNT_ID`,
+   set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, and load the file into your n8n
+   container/process.
+7. Restart n8n so it picks up the new environment variables.
 8. Activate the workflow and test it by submitting 1 image through the form trigger first,
    approving each Telegram prompt, and confirming a Reel gets created end-to-end before
    scaling up to full batches.
