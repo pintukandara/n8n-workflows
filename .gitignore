@@ -1,0 +1,40 @@
+# --- n8n ---
+.n8n/
+n8n_data/
+*.n8n-backup
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+*credentials*.json
+
+# --- Local media / processing artifacts ---
+/media/
+*.mp4
+*.mov
+*.mkv
+*.png
+*.jpg
+*.jpeg
+!docs/**/*.png
+!docs/**/*.jpg
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Node (if any custom nodes/scripts are added later) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Docker ---
+docker-compose.override.yml
